@@ -1,0 +1,89 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AINT(Artificial Intelligence New Testing)</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="aintIcon.png">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+    </style>
+</head>
+
+<body>
+    <header>
+        <a href="main.html" class="page-button">Student</a>
+        <h1> Artificial Intelligent Testing Center </h1>
+        <a href="admin.html" class="page-button">Admin</a>
+    
+    </header>
+
+    <div class="main-container">
+
+        <div class="exam-info">
+            <div class="timer"`>0:00</div>
+            <input class="student-name" type="text" placeholder="Your full name">
+            <input class="test-code" type="text" placeholder="Test Code">
+        </div>
+		<div class="avatar-container">
+            <!-- <img id="ai-avatar" src="ai_speech_frames/eyes_open_neutral.png" alt="AI Avatar"> -->
+        </div>
+        
+        <button class="start">Start</button>
+        </div>
+
+        <div class="question-output">
+            <p class="question-text">
+                Select a question type to begin.
+            </p>
+        </div>
+
+        <div class="response-container">
+            <h3>Student Response</h3>
+
+            <button class="listen" disabled>
+                Start Listening
+            </button>
+
+            <textarea
+                class="response"
+                placeholder="Your spoken response will appear here..."
+                disabled>
+            </textarea>
+
+            <button class="evaluate" disabled>
+                Evaluate Response
+            </button>
+
+            <div class="evaluation">
+                <p>AI evaluation will appear here.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="button-group">
+        <button class="objective" disabled>Objective</button>
+        <button class="semi" disabled>Semi-Objective</button>
+        <button class="qualitative" disabled>Qualitative</button>
+    </div>
+
+
+
+    <footer>
+        <p>&copy; 2026 Artificial Intelligent Testing Center. All rights reserved.</p>
+    </footer>
+
+    <!-- Order matters: core first, main last -->
+    <script src="js/core.js"></script>
+    <script src="js/student-exam.js"></script>
+    <script src="js/student-voice.js"></script>
+    <script src="js/admin-login.js"></script>
+    <script src="js/admin-tests.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>
+

@@ -1,0 +1,35 @@
+{
+    "name": "aint",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "start:server": "node server.js",
+        "start:ai": "node aiguide.js",
+        "dev": "node server.js"
+    },
+    "dependencies": {
+        "@google/generative-ai": "^0.24.1",
+        "cors": "^2.8.6",
+        "dotenv": "^16.6.1",
+        "express": "^4.22.3",
+        "mysql2": "^3.24.5",
+        "nodemailer": "^10.0.15",
+        "openai": "^7.27.0"
+    },
+    "description": "AI testing students. Ask questions, Records answers, evaluates response, and follows up.  # AINT — setup",
+    "main": "aiGuide.js",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/AmandaEric/AINT.git"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/AmandaEric/AINT/issues"
+    },
+    "homepage": "https://github.com/AmandaEric/AINT#readme",
+    "devDependencies": {
+        "concurrently": "^10.0.5"
+    }
+}

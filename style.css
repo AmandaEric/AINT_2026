@@ -1,0 +1,441 @@
+
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+body {
+
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* body must be at least as tall as the screen */
+    background-color: #f5f3ed;
+}
+
+header {
+    width: 100%;
+    height: 55px;
+    border: 2px solid #4db6ac;
+    background-color: #fb801cb3;
+    color: white;
+    font-size: 20px;
+    font-family: "Bebas Neue", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+    word-spacing: 5px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+}
+
+
+/* =========================
+   MAIN AREA
+   ========================= */
+
+.main-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+
+    width: 90%;
+    max-width: 1000px;
+
+    margin: 0 auto;
+}
+.main-container,
+.button-group {
+    flex-shrink: 0;
+}
+footer {
+    text-align: center;
+    padding: 10px;
+    background-color: #4db6ac;
+    color: white;
+    font-size: 14px;
+    margin-top: auto;
+    height: 10%;
+    width: 100%;
+
+}
+/* =========================
+   CONTROLS
+   ========================= */
+
+   .exam-info {
+    display: flex;
+    flex-direction: column;  
+    align-items: center;      
+    gap: 10px;                
+    width: 100%;
+    max-width: 300px;
+    margin: 20px auto;
+}
+
+.exam-info input {
+    width: 90%;              
+    padding: 10px;
+    box-sizing: border-box;   
+    font-size: 1rem;
+}
+
+.test-code {
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    text-align: center;
+}
+
+.student-name {
+    font-size: 18px;
+    font-family: Arial, sans-serif;
+    padding: 8px 10px;
+    width: 150px;
+    box-sizing: border-box;
+}
+
+.timer {
+    padding: 10px;
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 30px;
+    font-family: Arial, sans-serif;
+    border: 2px solid #4db6ac;
+    background-color: #fb801c76;
+    min-width: 80px;
+    height: 80px;
+}
+
+.start {
+    min-width: 100px;
+    max-height: 50px;
+    font-family: "Bebas Neue", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+    display: flex;
+    font-size: 30px;
+    justify-content: center;
+    align-items: center;
+}
+
+
+/* =========================
+   AVATAR
+   ========================= */
+.avatar-container {
+    position: relative;
+    width: 450px;
+    height: 400px;              /* gives the image something to fill */
+    margin: 30px auto;
+    background-color: #c5c1ba;
+    border: 2px solid #4db6ac;
+    border-radius: 16px;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;           /* keeps the picture inside the rounded corners */
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#ai-avatar {
+    width: 80%;
+    height: 80%;
+    object-fit: contain;
+    object-position: center;
+    display: block;
+}
+
+
+
+
+/* =========================
+   QUESTION
+   ========================= */
+
+.question-output {
+    width: 100%;
+    max-width: 850px;
+
+    max-height: 60px;
+
+    background-color: #e0f2f1;
+
+    border: 2px solid #4db6ac;
+    border-radius: 16px;
+
+    padding: 10px;
+
+    margin: 0 auto 10px;
+
+    font-size: 18px;
+    font-family: Arial, sans-serif;
+
+    color: #2f2f2f;
+}
+
+
+/* =========================
+   QUESTION TYPE BUTTONS
+   ========================= */
+
+.button-group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    width: 90%;
+    max-width: 850px;
+    margin: 5px auto;
+
+}
+
+button.objective {
+    /* your styles */
+    background-color: #f5f3ed;
+    text-decoration: none;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+    color: black;
+}
+button.semi {
+    /* your styles */
+    background-color: #f5f3ed;
+    text-decoration: none;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+    color: black;
+}
+
+button.qualitative {
+    /* your styles */
+    background-color: #f5f3ed;
+    text-decoration: none;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+    color: black;
+}
+
+
+/* =========================
+   BUTTONS
+   ========================= */
+
+button {
+    border: 2px solid #2f9e94;
+    border-radius: 10px;
+    background-color: #4db6ac;
+    color: #ffffff;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-family: Arial, sans-serif bold;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    margin: 15px;
+}
+.page-button{
+    border: 2px solid #2f9e94;
+    border-radius: 10px;
+    background-color: #4db6ac;
+    color: #ffffff;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-family: Arial, sans-serif;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    margin: 40px;
+    text-decoration: none;
+    letter-spacing: 2px;
+}
+
+button:hover {
+    background-color: #3f9a90;
+}
+
+button:active {
+    background-color: #fb801cb3;
+}
+
+.response-container{
+    display:flex;
+}
+
+/* ADMIN SPECIFIC */
+
+.add_question_container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    max-width: 1000px;
+    margin: 30px auto;
+    align-items: start;
+}
+
+.question-card {
+    border: 2px solid #ddd;
+    border-radius: 12px;
+    padding: 5px;
+    min-height: 200px;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+
+    background-color: white;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+}
+
+.question-type {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+.question-card p {
+    color: #555;
+    flex-grow: 1;
+}
+
+.add_question {
+    padding: 1px 20px;
+    border: none;
+    border-radius: 8px;
+    background-color: #4db6ac;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.add_question:hover {
+    background-color: #3f9a90;
+}
+#ai-avatar {
+    transition: opacity 0.05s ease-in-out;
+}
+
+/* =========================
+   MOBILE
+   ========================= */
+   @media (min-width: 601px) and (max-width: 900px) {
+
+    header {
+        height: 50px;
+        font-size: 13px;
+        
+    }
+    .page-button{
+        height:35px;
+        max-width: 30%;
+        margin:5px;
+        padding:5px
+    }
+
+    .main-container {
+        width: 95%;
+        max-width: 800px;
+    }
+
+    .controls {
+        width: 95%;
+        max-width: 750px;
+    }
+
+    .avatar-container {
+        width: 380px;
+        height: 340px;
+        margin: 20px auto;
+    }
+
+    #ai-avatar {
+        width: 85%;
+        height: 85%;
+    }
+
+    .question-output {
+        width: 95%;
+        max-width: 750px;
+        font-size: 16px;
+    }
+
+    .button-group {
+        width: 95%;
+        max-width: 750px;
+        gap: 8px;
+    }
+
+    button {
+        font-size: 15px;
+        padding: 9px 15px;
+        margin: 8px;
+    }
+
+    .timer {
+        width: 70px;
+        height: 70px;
+        min-width: 70px;
+        font-size: 25px;
+    }
+
+    .start {
+        font-size: 25px;
+        min-width: 90px;
+    }
+
+    footer {
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 600px) {
+
+    header {
+        padding: 5px;
+        font-size: 10px;
+        height: 45px;
+        word-spacing: 2px;
+    }
+
+    .main-container {
+        width: 100%;
+    }
+    .page-button{
+        height:35px;
+        max-width: 30%;
+        margin:5px;
+        padding:5px
+    }
+
+    .controls {
+        justify-content: center;
+    }
+
+    .avatar-container {
+        width: 100%;
+        height: 250px;
+    }
+
+    .question-output {
+        width: 100%;
+    }
+
+    .button-group {
+        grid-template-columns: 1fr;
+
+        width: 100%;
+        max-width: 300px;
+    }
+
+    .timer {
+        font-size: 22px;
+    }
+
+    button {
+        font-size: 14px;
+        padding: 8px 14px;
+    }
+}

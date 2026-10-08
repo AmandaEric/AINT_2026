@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AINT - Admin</title>
+
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="aintIcon.png">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <a href="main.html" class="page-button">Student</a>
+        <h1>Artificial Intelligent Testing Center</h1>
+        <a href="admin.html" class="page-button">Admin</a>
+    </header>
+
+    <!-- SCREEN 1: LOGIN -->
+    <div id="adminLogin">
+        <h2>Admin Login</h2>
+        
+        <div id="loginStepEmail">
+            <input id="loginEmail" type="email" placeholder="Your email">
+            <button id="sendCodeButton" type="button">Continue</button>
+        </div>
+
+        <div id="loginStepCode" hidden>
+            <p>Enter your login code for <strong id="loginSentTo"></strong></p>
+            <input id="loginCode" type="text" maxlength="8" autocomplete="off" autocapitalize="characters" placeholder="ABCD2345">
+            <button id="verifyCodeButton" type="button">Log in</button>
+            <button id="backToEmailButton" type="button">Use a different email</button>
+        </div>
+
+        <p id="loginMessage"></p>
+    </div>
+
+    <!-- AFTER LOGIN -->
+    <div id="adminPanel" hidden>
+        <p>Logged in as <strong id="adminEmailLabel"></strong>
+        <button id="logoutButton" type="button">Log out</button></p>
+
+        <!-- SCREEN 2: MENU -->
+        <div id="adminMenu">
+            <h2>What would you like to do?</h2>
+            <button id="menuCreateButton" type="button">Create a new test</button>
+            <button id="menuViewButton" type="button">View or edit an existing test</button>
+        </div>
+
+        <!-- SCREEN 3a: CREATE -->
+        <div id="createScreen" hidden>
+            <button id="createBackButton" type="button">&larr; Back</button>
+            <h2>Create a New Test</h2>
+            <input id="testName" type="text" placeholder="Test name (optional)">
+
+            <h3>Objective</h3>
+            <p>Questions with one clear correct answer, such as facts, definitions, or calculations.</p>
+            <input id="objectiveInput" type="text" placeholder="Add an objective question">
+            <button id="objectiveAdd" type="button">Add Question</button>
+            <div id="objectiveList"></div>
+
+            <h3>Semi-Objective</h3>
+            <p>Questions with a correct answer where the student must also explain or show their reasoning.</p>
+            <input id="semiInput" type="text" placeholder="Add a semi-objective question">
+            <button id="semiAdd" type="button">Add Question</button>
+            <div id="semiList"></div>
+
+            <h3>Qualitative</h3>
+            <p>Open-ended questions where students give their own analysis or opinion. There is no single right answer.</p>
+            <input id="qualitativeInput" type="text" placeholder="Add a qualitative question">
+            <button id="qualitativeAdd" type="button">Add Question</button>
+            <div id="qualitativeList"></div>
+
+            <button class="clearQuestion" type="button">Clear all questions</button>
+            <button id="createTest" type="button">Create Test</button>
+            <div id="createdTest"></div>
+        </div>
+
+        <!-- SCREEN 3b: EXISTING TESTS -->
+        <div id="testsScreen" hidden>
+            <button id="testsBackButton" type="button">&larr; Back</button>
+            <h2>My Tests</h2>
+            <div id="myTests"></div>
+            <div id="resultsList"></div>
+            <div id="editView"></div>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 Artificial Intelligent Testing Center. All rights reserved.</p>
+    </footer>
+
+    <!-- Order matters: core first, main last -->
+    <script src="js/core.js"></script>
+    <script src="js/student-exam.js"></script>
+    <script src="js/student-voice.js"></script>
+    <script src="js/admin-login.js"></script>
+    <script src="js/admin-tests.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
