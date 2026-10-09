@@ -21,34 +21,33 @@
     </header>
 
     <div class="main-container">
+        <div class="center-screen">
 
-        <div class="exam-info" id="examInfo">
-            <input class="student-name" type="text" placeholder="Your full name">
-            <input class="test-code" type="text" placeholder="Test Code">
+            <div class="exam-info" id="examInfo">
+                <input class="student-name" type="text" placeholder="Your full name">
+                <input class="test-code" type="text" placeholder="Test Code">
+            </div>
+            <div class="avatar-container">
+                <img id="ai-avatar" src="aint_avatar_frames/01_neutral.png" alt="AINT AI speaking avatar">
+            </div>
+            <div class="test-controls">
+                <div class="timer">0:00</div>
+                <button class="start">Start</button>
+            </div>
         </div>
-		<div class="avatar-container">
-            <!-- <img id="ai-avatar" src="ai_speech_frames/eyes_open_neutral.png" alt="AI Avatar"> -->
-        </div>
-        <div class="test-controls">
-            <div class="timer">0:00</div>
-            <button class="start">Start</button>
-        </div>
-        </div>
-        <div class="question-output">
-            <p class="question-text">
-                <div class="evaluation">
-                    <p>AI evaluation will appear here.</p>
-                </div>
-            </p>
-        </div>
-
+            <div class="question-output">
+                <p class="question-text">
+                    <div class="evaluation">
+                        <p>AI evaluation will appear here.</p>
+                    </div>
+                </p>
+            </div>
         <div class="response-container">
             <h3>Student Response</h3>
 
             <button class="listen" disabled>
                 Start Listening
             </button>
-
             <textarea
                 class="response"
                 placeholder="Your spoken response will appear here..."
@@ -70,6 +69,7 @@
 
     <!-- Order matters: core first, main last -->
     <script src="js/core.js"></script>
+    <script src="js/avatar-speech.js"></script>
     <script src="js/student-exam.js"></script>
     <script src="js/student-voice.js"></script>
     <script src="js/admin-login.js"></script>

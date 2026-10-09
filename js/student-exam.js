@@ -25,6 +25,22 @@ function updateTimerDisplay() {
 }
 
 
+function setQuestionButtonsEnabled(enabled) {
+
+    if (el.objective) {
+        el.objective.disabled = !enabled;
+    }
+
+    if (el.semiButton) {
+        el.semiButton.disabled = !enabled;
+    }
+
+    if (el.qualatativeButton) {
+        el.qualatativeButton.disabled = !enabled;
+    }
+}
+
+
 function startTimer() {
 
     state.testRunning = true;
@@ -32,6 +48,8 @@ function startTimer() {
     if (el.startButton) {
         el.startButton.textContent = "Stop Test";
     }
+
+    setQuestionButtonsEnabled(true);
 
     // Allow the student to type an answer
     if (el.responseBox) {
@@ -59,6 +77,8 @@ function stopTimer() {
     }
 
     clearInterval(state.timerInterval);
+
+    setQuestionButtonsEnabled(false);
 
     if (state.isListening && state.recognition) {
         state.recognition.stop();
@@ -92,11 +112,13 @@ on(
             }
 
             // Ask for the test code
-            const code = (
-                prompt("Enter your test code:") || ""
-            ).trim().toUpperCase();
 
+            const code = (
+                el.testCodeInput?.value || ""
+            ).trim().toUpperCase();
+            
             if (!code) {
+                alert("Please enter your test code.");
                 return;
             }
 
@@ -124,6 +146,20 @@ on(
                 exam.testCode = code;
                 exam.testQuestions = data.questions;
 
+                /* Hide student information after the test loads */
+                if (el.studentName) {
+                    el.studentName.style.display = "none";
+                }
+
+                if (el.testCodeInput) {
+                    el.testCodeInput.style.display = "none";
+                }
+
+                /* Expand the AI avatar */
+                if (el.avatarContainer) {
+                    el.avatarContainer.classList.add("avatar-container-large");
+                }
+
             } catch (error) {
 
                 console.error("START ERROR:", error);
@@ -144,14 +180,11 @@ on(
             exam.submitted = false;
 
             state.seconds = 0;
+            state.selectedQuestions = [];
 
             updateTimerDisplay();
 
             startTimer();
-
-            // The first question appears right away (no category buttons)
-            loadAllQuestions();
-            askNextQuestion();
 
             return;
         }
@@ -265,27 +298,46 @@ window.submitExam = submitExam;
 // STUDENT: PICKING AND ASKING QUESTIONS
 // ==========================================
 
-// Put every question of the test into ONE pool. Each one remembers its
-// category (used for the AI's rules and for grading), but the student
-// never chooses a category.
-function loadAllQuestions() {
+// Add an entire category
+// (uses the questions loaded from the server for this test code)
+function addCategory(category) {
 
-    state.selectedQuestions = [];
+    const questions = exam.testQuestions[category];
 
-    ["objective", "semi", "qualitative"].forEach(category => {
-        (exam.testQuestions[category] || []).forEach(text => {
-            state.selectedQuestions.push({ category: category, text: text });
-        });
+    if (!questions || questions.length === 0) {
+
+        if (el.questionText) {
+            el.questionText.textContent =
+                `No questions available in the ${category} category.`;
+        }
+
+        return;
+    }
+
+    // Add questions that have not already been selected
+    questions.forEach(question => {
+        if (!state.selectedQuestions.includes(question)) {
+            state.selectedQuestions.push(question);
+        }
     });
 }
 
 
-// Ask the next question (picked at random from the whole pool)
+// Ask next question
 function askNextQuestion() {
 
     if (!el.questionText) {
         return;
     }
+
+    if (state.selectedQuestions.length === 0) {
+        el.questionText.textContent = "No more questions available.";
+        return;
+    }
+    // Display and speak the question with the animated avatar
+    el.questionText.textContent = picked.text;
+
+    speakAsAvatar(picked.text);
 
     // Save an answer that was typed or spoken
     // for the previous question but never evaluated
@@ -309,29 +361,26 @@ function askNextQuestion() {
         el.responseBox.value = "";
     }
 
-    // Pick a random question from everything that is left
+    // Pick random question
     const randomIndex = Math.floor(
         Math.random() * state.selectedQuestions.length
     );
 
-    const picked = state.selectedQuestions.splice(randomIndex, 1)[0];
-
-    // The AI follow-up and the grading use this category
-    currentCategory = picked.category;
+    const question = state.selectedQuestions.splice(randomIndex, 1)[0];
 
     // Start a new entry in the exam log
     exam.current = {
-        category: picked.category,
-        question: picked.text,
+        category: currentCategory,
+        question: question,
         exchanges: []
     };
 
     exam.log.push(exam.current);
 
     // Display and speak the question
-    el.questionText.textContent = picked.text;
+    el.questionText.textContent = question;
 
-    speakQuestion(picked.text);
+    speakQuestion(question);
 
     // Enable response controls
     if (el.responseBox) {
@@ -352,6 +401,25 @@ function askNextQuestion() {
     }
 }
 
+
+// Category buttons
+on(el.objective, "click", () => {
+    currentCategory = "objective";
+    addCategory("objective");
+    askNextQuestion();
+});
+
+on(el.semiButton, "click", () => {
+    currentCategory = "semi";
+    addCategory("semi");
+    askNextQuestion();
+});
+
+on(el.qualatativeButton, "click", () => {
+    currentCategory = "qualitative";
+    addCategory("qualitative");
+    askNextQuestion();
+});
 
 // ==========================================
 // STUDENT: AI EVALUATION (follow-up questions)
@@ -423,23 +491,20 @@ async function handleEvaluate() {
 
             el.responseBox.value = "";
 
-            // Speak follow-up
-            speakQuestion(data.followUpQuestion);
+            
+            // Speak follow-up with the animated avatar
+            speakAsAvatar(data.followUpQuestion);
 
         }
 
         // ---------- NO FOLLOW-UP ----------
         else {
 
-            const moreQuestions = state.selectedQuestions.length > 0;
-
             el.evaluationBox.innerHTML = `
                 <h4>AI Evaluation</h4>
                 <p>${data.evaluation}</p>
                 <p><strong>Score:</strong> ${data.score}</p>
-                ${moreQuestions
-                    ? '<button type="button" id="nextQuestionButton">Next Question</button>'
-                    : "<p>That was the last question. Click Stop Test to submit your exam.</p>"}
+                <p>No follow-up question is needed.</p>
             `;
 
         }
@@ -462,10 +527,3 @@ async function handleEvaluate() {
 
 // Evaluate button
 on(el.evaluateButton, "click", handleEvaluate);
-
-// "Next Question" button (it is created inside the evaluation box)
-on(el.evaluationBox, "click", function (event) {
-    if (event.target.id === "nextQuestionButton") {
-        askNextQuestion();
-    }
-});

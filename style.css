@@ -15,7 +15,7 @@ body {
     flex-direction: column;
     min-height: 100vh; /* body must be at least as tall as the screen */
     background-color: #f5f3ed;
-    margin-left:10px ;
+    
 }
 
 header {
@@ -40,15 +40,25 @@ header {
    MAIN AREA
    ========================= */
 
-.main-container {
+
+   .main-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 1100px;
+    padding: 10px 20px;
+    margin: 0 auto;
+}
+
+/* Row containing the inputs, avatar, and controls */
+.center-screen {
     display: flex;
     flex-direction: row;
     align-items: center;
-
-    width: 90%;
-    max-width: 1000px;
-
-    margin: 0 auto;
+    justify-content: center;
+    gap: 20px;
+    width: 100%;
 }
 .main-container,
 .button-group {
@@ -76,7 +86,7 @@ footer {
     gap: 10px;                
     width: 60%;
     max-width: 200px;
-    margin: 20px auto;
+    margin: 10px auto;
 }
 
 .exam-info input {
@@ -105,9 +115,9 @@ footer {
     align-items: center;
 }
 .timer {
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
+    width: 50px;
+    height: 50px;
+    min-width: 50px;
     padding: 10px;
     display: flex;
     align-items: center;
@@ -115,7 +125,7 @@ footer {
     box-sizing: border-box;
     flex-shrink: 0;
     border-radius: 50%;
-    font-size: 10px;
+    font-size: 20px;
     font-family: Arial, sans-serif;
     border: 2px solid #4db6ac;
     background-color: #fb801c76;
@@ -143,9 +153,9 @@ footer {
    ========================= */
 .avatar-container {
     position: relative;
-    width: 450px;
+    width: 100%;
     height: 400px;              /* gives the image something to fill */
-    margin: 30px auto;
+    margin: 20px auto;
     background-color: #c5c1ba;
     border: 2px solid #4db6ac;
     border-radius: 16px;
@@ -234,12 +244,50 @@ button:active {
     background-color: #fb801cb3;
 }
 
-.response-container{
-    display:flex;
+
+.response-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    width: 100%;
+    max-width: 850px;
+    margin: 10px auto;
+    padding: 20px;
+
+    background-color: #e0f2f1;
+    border: 2px solid #4db6ac;
+    border-radius: 16px;
+}
+
+.response-container .response {
+    width: 100%;
+    min-height: 120px;
+    padding: 10px;
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+}
+
+.response-container .evaluation {
+    width: 100%;
+    text-align: center;
 }
 
 /* ADMIN SPECIFIC */
-
+#adminLogin {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+#adminPanel, #adminMenu{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+#createScreen{
+    margin-left: 20px;
+}
 .add_question_container {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -425,5 +473,5 @@ button:active {
     width: min(85vw, 650px);
     height: min(65vh, 550px);
     max-width: 100%;
-    margin: 5 auto;
+    margin: 5px auto;
 }
