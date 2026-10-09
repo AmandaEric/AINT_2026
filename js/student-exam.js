@@ -25,22 +25,6 @@ function updateTimerDisplay() {
 }
 
 
-function setQuestionButtonsEnabled(enabled) {
-
-    if (el.objective) {
-        el.objective.disabled = !enabled;
-    }
-
-    if (el.semiButton) {
-        el.semiButton.disabled = !enabled;
-    }
-
-    if (el.qualatativeButton) {
-        el.qualatativeButton.disabled = !enabled;
-    }
-}
-
-
 function startTimer() {
 
     state.testRunning = true;
@@ -48,8 +32,6 @@ function startTimer() {
     if (el.startButton) {
         el.startButton.textContent = "Stop Test";
     }
-
-    setQuestionButtonsEnabled(true);
 
     // Allow the student to type an answer
     if (el.responseBox) {
@@ -77,8 +59,6 @@ function stopTimer() {
     }
 
     clearInterval(state.timerInterval);
-
-    setQuestionButtonsEnabled(false);
 
     if (state.isListening && state.recognition) {
         state.recognition.stop();
@@ -164,11 +144,14 @@ on(
             exam.submitted = false;
 
             state.seconds = 0;
-            state.selectedQuestions = [];
 
             updateTimerDisplay();
 
             startTimer();
+
+            // The first question appears right away (no category buttons)
+            loadAllQuestions();
+            askNextQuestion();
 
             return;
         }
@@ -282,40 +265,25 @@ window.submitExam = submitExam;
 // STUDENT: PICKING AND ASKING QUESTIONS
 // ==========================================
 
-// Add an entire category
-// (uses the questions loaded from the server for this test code)
-function addCategory(category) {
+// Put every question of the test into ONE pool. Each one remembers its
+// category (used for the AI's rules and for grading), but the student
+// never chooses a category.
+function loadAllQuestions() {
 
-    const questions = exam.testQuestions[category];
+    state.selectedQuestions = [];
 
-    if (!questions || questions.length === 0) {
-
-        if (el.questionText) {
-            el.questionText.textContent =
-                `No questions available in the ${category} category.`;
-        }
-
-        return;
-    }
-
-    // Add questions that have not already been selected
-    questions.forEach(question => {
-        if (!state.selectedQuestions.includes(question)) {
-            state.selectedQuestions.push(question);
-        }
+    ["objective", "semi", "qualitative"].forEach(category => {
+        (exam.testQuestions[category] || []).forEach(text => {
+            state.selectedQuestions.push({ category: category, text: text });
+        });
     });
 }
 
 
-// Ask next question
+// Ask the next question (picked at random from the whole pool)
 function askNextQuestion() {
 
     if (!el.questionText) {
-        return;
-    }
-
-    if (state.selectedQuestions.length === 0) {
-        el.questionText.textContent = "No more questions available.";
         return;
     }
 
@@ -328,31 +296,42 @@ function askNextQuestion() {
         );
     }
 
+    if (state.selectedQuestions.length === 0) {
+        el.questionText.textContent =
+            exam.log.length === 0
+                ? "This test has no questions."
+                : "That was the last question. Click Stop Test to submit your exam.";
+        return;
+    }
+
     // Clear the response box for the new question
     if (el.responseBox) {
         el.responseBox.value = "";
     }
 
-    // Pick random question
+    // Pick a random question from everything that is left
     const randomIndex = Math.floor(
         Math.random() * state.selectedQuestions.length
     );
 
-    const question = state.selectedQuestions.splice(randomIndex, 1)[0];
+    const picked = state.selectedQuestions.splice(randomIndex, 1)[0];
+
+    // The AI follow-up and the grading use this category
+    currentCategory = picked.category;
 
     // Start a new entry in the exam log
     exam.current = {
-        category: currentCategory,
-        question: question,
+        category: picked.category,
+        question: picked.text,
         exchanges: []
     };
 
     exam.log.push(exam.current);
 
     // Display and speak the question
-    el.questionText.textContent = question;
+    el.questionText.textContent = picked.text;
 
-    speakQuestion(question);
+    speakQuestion(picked.text);
 
     // Enable response controls
     if (el.responseBox) {
@@ -373,25 +352,6 @@ function askNextQuestion() {
     }
 }
 
-
-// Category buttons
-on(el.objective, "click", () => {
-    currentCategory = "objective";
-    addCategory("objective");
-    askNextQuestion();
-});
-
-on(el.semiButton, "click", () => {
-    currentCategory = "semi";
-    addCategory("semi");
-    askNextQuestion();
-});
-
-on(el.qualatativeButton, "click", () => {
-    currentCategory = "qualitative";
-    addCategory("qualitative");
-    askNextQuestion();
-});
 
 // ==========================================
 // STUDENT: AI EVALUATION (follow-up questions)
@@ -471,11 +431,15 @@ async function handleEvaluate() {
         // ---------- NO FOLLOW-UP ----------
         else {
 
+            const moreQuestions = state.selectedQuestions.length > 0;
+
             el.evaluationBox.innerHTML = `
                 <h4>AI Evaluation</h4>
                 <p>${data.evaluation}</p>
                 <p><strong>Score:</strong> ${data.score}</p>
-                <p>No follow-up question is needed.</p>
+                ${moreQuestions
+                    ? '<button type="button" id="nextQuestionButton">Next Question</button>'
+                    : "<p>That was the last question. Click Stop Test to submit your exam.</p>"}
             `;
 
         }
@@ -498,3 +462,10 @@ async function handleEvaluate() {
 
 // Evaluate button
 on(el.evaluateButton, "click", handleEvaluate);
+
+// "Next Question" button (it is created inside the evaluation box)
+on(el.evaluationBox, "click", function (event) {
+    if (event.target.id === "nextQuestionButton") {
+        askNextQuestion();
+    }
+});

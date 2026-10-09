@@ -75,7 +75,14 @@ const el = {
     semiAdd: document.getElementById("semiAdd"),
     qualitativeAdd: document.getElementById("qualitativeAdd"),
 
+    
+    // Student exam information
     studentName: document.querySelector(".student-name"),
+    testCodeInput: document.querySelector(".test-code"),
+    examInfo: document.querySelector(".exam-info"),
+
+    // AI avatar container
+    avatarContainer: document.querySelector(".avatar-container"),
 
     // Admin: login screen and page
     adminLogin: document.getElementById("adminLogin"),

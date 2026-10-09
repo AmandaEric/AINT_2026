@@ -15,6 +15,7 @@ body {
     flex-direction: column;
     min-height: 100vh; /* body must be at least as tall as the screen */
     background-color: #f5f3ed;
+    margin-left:10px ;
 }
 
 header {
@@ -73,8 +74,8 @@ footer {
     flex-direction: column;  
     align-items: center;      
     gap: 10px;                
-    width: 100%;
-    max-width: 300px;
+    width: 60%;
+    max-width: 200px;
     margin: 20px auto;
 }
 
@@ -95,24 +96,34 @@ footer {
     font-size: 18px;
     font-family: Arial, sans-serif;
     padding: 8px 10px;
-    width: 150px;
+    width: 100px;
     box-sizing: border-box;
 }
-
+.test-controls{
+    display: flex;
+    flex-direction: column; 
+    align-items: center;
+}
 .timer {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
     padding: 10px;
-    
     display: flex;
     align-items: center;
     justify-content: center;
+    box-sizing: border-box;
+    flex-shrink: 0;
     border-radius: 50%;
-    font-size: 30px;
+    font-size: 10px;
     font-family: Arial, sans-serif;
     border: 2px solid #4db6ac;
     background-color: #fb801c76;
-    min-width: 80px;
-    height: 80px;
+    margin: 10px;
+    margin-bottom: 30%;
+    
 }
+    
 
 .start {
     min-width: 100px;
@@ -182,43 +193,6 @@ footer {
     color: #2f2f2f;
 }
 
-
-/* =========================
-   QUESTION TYPE BUTTONS
-   ========================= */
-
-.button-group {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    width: 90%;
-    max-width: 850px;
-    margin: 5px auto;
-
-}
-
-button.objective {
-    /* your styles */
-    background-color: #f5f3ed;
-    text-decoration: none;
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
-    color: black;
-}
-button.semi {
-    /* your styles */
-    background-color: #f5f3ed;
-    text-decoration: none;
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
-    color: black;
-}
-
-button.qualitative {
-    /* your styles */
-    background-color: #f5f3ed;
-    text-decoration: none;
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
-    color: black;
-}
 
 
 /* =========================
@@ -375,10 +349,10 @@ button:active {
     }
 
     .timer {
-        width: 70px;
-        height: 70px;
-        min-width: 70px;
-        font-size: 25px;
+        width: 30px;
+        height: 30px;
+        min-width: 30px;
+        font-size: 10px;
     }
 
     .start {
@@ -431,11 +405,25 @@ button:active {
     }
 
     .timer {
-        font-size: 22px;
+        font-size: 10px;
     }
 
     button {
         font-size: 14px;
         padding: 8px 14px;
     }
+}
+
+/* Smoothly expand the AI avatar area */
+.avatar-container {
+    box-sizing: border-box;
+    transition: width 0.3s ease, height 0.3s ease;
+}
+
+/* Larger AI container after Start is clicked */
+.avatar-container.avatar-container-large {
+    width: min(85vw, 650px);
+    height: min(65vh, 550px);
+    max-width: 100%;
+    margin: 5 auto;
 }
