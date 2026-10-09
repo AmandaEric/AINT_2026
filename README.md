@@ -2,8 +2,7 @@
 AI testing students. Ask questions, Records answers, evaluates response, and follows up. 
 # AINT — setup
 
-## 1. Replace the leaked key
-The old key was published in index.html. Delete it in Google AI Studio and make a new one.
+## 1. Create API Keys put in .env
 
 ## 2. Install and run
     npm install
