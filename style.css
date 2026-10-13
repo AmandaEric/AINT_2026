@@ -182,24 +182,17 @@ footer {
    QUESTION
    ========================= */
 
-.question-output {
+   .question-output {
     width: 100%;
     max-width: 850px;
-
-    max-height: 60px;
-
+    min-height: 60px;          /* was max-height: 60px */
     background-color: #e0f2f1;
-
     border: 2px solid #4db6ac;
     border-radius: 16px;
-
     padding: 10px;
-
     margin: 0 auto 10px;
-
     font-size: 18px;
     font-family: Arial, sans-serif;
-
     color: #2f2f2f;
 }
 
@@ -219,7 +212,7 @@ button {
     font-family: Arial, sans-serif bold;
     cursor: pointer;
     transition: background-color 0.2s ease;
-    margin: 15px;
+    margin: 10px;
 }
 .page-button{
     border: 2px solid #2f9e94;
@@ -254,7 +247,7 @@ button:active {
     width: 100%;
     max-width: 850px;
     margin: 10px auto;
-    padding: 20px;
+    padding: 10px;
 
     background-color: #e0f2f1;
     border: 2px solid #4db6ac;
@@ -263,15 +256,16 @@ button:active {
 
 .response-container .response {
     width: 100%;
-    min-height: 120px;
+    min-height: 60px;
     padding: 10px;
     font-family: Arial, sans-serif;
     font-size: 16px;
 }
 
-.response-container .evaluation {
+.evaluation {
     width: 100%;
     text-align: center;
+    margin-top: 10px;
 }
 
 /* ADMIN SPECIFIC */
@@ -331,6 +325,9 @@ button:active {
     color: white;
     font-size: 16px;
     cursor: pointer;
+}
+[hidden] {
+    display: none !important;
 }
 
 .add_question:hover {

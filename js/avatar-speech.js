@@ -1,7 +1,9 @@
-
 /*
  * AINT Avatar Speech Animation
  * Uses the browser's built-in speech synthesis.
+ *
+ * Load this file BEFORE student-exam.js.
+ * Exposes: speakAsAvatar(text), stopAvatarSpeech()
  */
 
 const AINT_AVATAR_PATH = "aint_avatar_frames/";
@@ -143,22 +145,31 @@ function speakAsAvatar(text) {
     speaking = false;
     currentWord = "";
 
-    currentUtterance = new SpeechSynthesisUtterance(text.trim());
-    currentUtterance.lang = "en-US";
-    currentUtterance.rate = 0.95;
-    currentUtterance.pitch = 1.0;
+    const cleanText = text.trim();
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = "en-US";
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
 
-    currentUtterance.onstart = () => {
+    // Mark this as the active utterance. Events from older, cancelled
+    // utterances arrive late and must be ignored, otherwise they reset
+    // the avatar in the middle of the new question.
+    currentUtterance = utterance;
+
+    utterance.onstart = () => {
+        if (currentUtterance !== utterance) return;
+
         speaking = true;
-        currentWord = text.trim();
+        currentWord = cleanText;
         startMouthAnimation();
     };
 
     // Most browsers report word boundaries rather than phonemes.
-    currentUtterance.onboundary = (event) => {
+    utterance.onboundary = (event) => {
+        if (currentUtterance !== utterance) return;
         if (typeof event.charIndex !== "number") return;
 
-        const remainingText = text.slice(event.charIndex);
+        const remainingText = cleanText.slice(event.charIndex);
         const match = remainingText.match(/^[\w'-]+/);
 
         if (match) {
@@ -166,13 +177,17 @@ function speakAsAvatar(text) {
         }
     };
 
-    currentUtterance.onend = () => {
+    utterance.onend = () => {
+        if (currentUtterance !== utterance) return;
+
         speaking = false;
         stopMouthAnimation();
         setAvatarFrame("neutral");
     };
 
-    currentUtterance.onerror = (event) => {
+    utterance.onerror = (event) => {
+        if (currentUtterance !== utterance) return;
+
         speaking = false;
         stopMouthAnimation();
         setAvatarFrame("neutral");
@@ -184,11 +199,13 @@ function speakAsAvatar(text) {
     };
 
     setAvatarFrame("neutral");
-    window.speechSynthesis.speak(currentUtterance);
+    window.speechSynthesis.speak(utterance);
 }
 
 // Stop speech when requested by your app.
 function stopAvatarSpeech() {
+    // Detach the active utterance so its late events are ignored.
+    currentUtterance = null;
     speaking = false;
     stopMouthAnimation();
 

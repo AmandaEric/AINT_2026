@@ -37,11 +37,12 @@ const el = {
     // Timer
     timer: document.querySelector(".timer"),
     startButton: document.querySelector(".start"),
+    nextButton: document.querySelector("#next-button"),
 
-    // Question category buttons
-    objective: document.querySelector(".objective"),
-    semiButton: document.querySelector(".semi"),
-    qualatativeButton: document.querySelector(".qualitative"),
+    // // Question category buttons
+    // objective: document.querySelector(".objective"),
+    // semiButton: document.querySelector(".semi"),
+    // qualatativeButton: document.querySelector(".qualitative"),
 
     // Question
     questionText: document.querySelector(".question-text"),
@@ -69,11 +70,13 @@ const el = {
     objectiveInput: document.getElementById("objectiveInput"),
     semiInput: document.getElementById("semiInput"),
     qualitativeInput: document.getElementById("qualitativeInput"),
+    grading_guidelines: document.getElementById("grading_guidelines"),
 
     // Admin add buttons
     objectiveAdd: document.getElementById("objectiveAdd"),
     semiAdd: document.getElementById("semiAdd"),
     qualitativeAdd: document.getElementById("qualitativeAdd"),
+    guidelinesAdd: document.getElementById("guidelinesAdd"),
 
     
     // Student exam information

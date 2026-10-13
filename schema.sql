@@ -128,6 +128,10 @@ CREATE TABLE IF NOT EXISTS Sessions (
 );
 
 
+USE aint_db;
+
+ALTER TABLE tests
+ADD COLUMN grading_guidelines TEXT NULL;
 -- ==========================================================
 -- ALREADY CREATED THE TABLES WITH THE OLD SCRIPT?
 -- "CREATE TABLE IF NOT EXISTS" won't change a table that already

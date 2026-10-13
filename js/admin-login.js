@@ -64,7 +64,7 @@ function showAdminPanel(loggedIn) {
         }
 
         // Always land on the menu first
-        showAdminScreen("menu");
+            showAdminScreen("menu");
     }
 }
 
@@ -365,3 +365,10 @@ on(el.loginCode, "keydown", function (event) {
         verifyLoginCode();
     }
 });
+
+function initAdminPage() {
+    if (!el.adminLogin || !el.adminPanel) return;
+
+    showLoginStep("email");
+    showAdminPanel(Boolean(admin.token));
+}

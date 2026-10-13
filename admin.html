@@ -42,11 +42,11 @@
 
     <!-- AFTER LOGIN -->
     <div id="adminPanel" hidden>
-        <p>Logged in as <strong id="adminEmailLabel"></strong>
-        <button id="logoutButton" type="button">Log out</button></p>
+        <!-- <p>Logged in as <strong id="adminEmailLabel"></strong> -->
+        <!-- <button id="logoutButton" type="button">Log out</button></p> -->
 
         <!-- SCREEN 2: MENU -->
-        <div id="adminMenu">
+        <div id="adminMenu" hidden>
             <h2>What would you like to do?</h2>
             <button id="menuCreateButton" type="button">Create a new test</button>
             <button id="menuViewButton" type="button">View or edit an existing test</button>
@@ -76,6 +76,11 @@
             <button id="qualitativeAdd" type="button">Add Question</button>
             <div id="qualitativeList"></div>
 
+            <h3>Additional Instructions for AI</h3>
+            <input id="grading_guidelines" type="text" placeholder="Additional grading information or rules for AI?">
+            <button id="guidelinesAdd" type="button">Add Instructions</button>
+            <div id="guidelinesList"></div>
+
             <button class="clearQuestion" type="button">Clear all questions</button>
             <button id="createTest" type="button">Create Test</button>
             <div id="createdTest"></div>
@@ -89,6 +94,8 @@
             <div id="resultsList"></div>
             <div id="editView"></div>
         </div>
+        <p>Logged in as <strong id="adminEmailLabel"></strong>
+        <button id="logoutButton" type="button">Log out</button></p>
     </div>
 
     <footer>

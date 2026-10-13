@@ -4,6 +4,9 @@
  * Timer, Start/Stop button, submitting the exam for grading,
  * picking and asking questions, and the Evaluate button that gets
  * AI follow-up questions.
+ *
+ * Requires avatar-speech.js to be loaded BEFORE this file
+ * (provides speakAsAvatar and stopAvatarSpeech).
  * ============================================================
  */
 
@@ -26,17 +29,8 @@ function updateTimerDisplay() {
 
 
 function setQuestionButtonsEnabled(enabled) {
-
-    if (el.objective) {
-        el.objective.disabled = !enabled;
-    }
-
-    if (el.semiButton) {
-        el.semiButton.disabled = !enabled;
-    }
-
-    if (el.qualatativeButton) {
-        el.qualatativeButton.disabled = !enabled;
+    if (el.nextButton) {
+        el.nextButton.disabled = !enabled;
     }
 }
 
@@ -94,6 +88,28 @@ function stopTimer() {
 }
 
 // ==========================================
+// STUDENT: SAVING ANSWERS
+// ==========================================
+
+// Saves whatever is in the response box, unless it is empty or was
+// already recorded by the Evaluate button. Prevents duplicate entries.
+function saveUnsentAnswer() {
+
+    if (!exam.current || !el.responseBox || !el.questionText) {
+        return;
+    }
+
+    const answer = el.responseBox.value.trim();
+
+    if (answer === "" || answer === exam.lastRecordedAnswer) {
+        return;
+    }
+
+    recordAnswer(el.questionText.textContent, answer);
+    exam.lastRecordedAnswer = answer;
+}
+
+// ==========================================
 // STUDENT: START / STOP / SUBMIT THE EXAM
 // ==========================================
 
@@ -116,7 +132,7 @@ on(
             const code = (
                 el.testCodeInput?.value || ""
             ).trim().toUpperCase();
-            
+
             if (!code) {
                 alert("Please enter your test code.");
                 return;
@@ -143,8 +159,12 @@ on(
 
                 const data = await response.json();
 
+
                 exam.testCode = code;
                 exam.testQuestions = data.questions;
+                
+                // Save the teacher's grading guidelines from the server
+                exam.gradingGuidelines = data.grading_guidelines || "";
 
                 /* Hide student information after the test loads */
                 if (el.studentName) {
@@ -178,6 +198,7 @@ on(
             exam.log = [];
             exam.current = null;
             exam.submitted = false;
+            exam.lastRecordedAnswer = null;
 
             state.seconds = 0;
             state.selectedQuestions = [];
@@ -185,6 +206,8 @@ on(
             updateTimerDisplay();
 
             startTimer();
+            addAllQuestions();
+            askNextQuestion();
 
             return;
         }
@@ -197,18 +220,13 @@ on(
 
         // Save an answer that was typed or spoken
         // but never sent with the Evaluate button
-        if (el.responseBox && el.questionText) {
-            recordAnswer(
-                el.questionText.textContent,
-                el.responseBox.value.trim()
-            );
-        }
+        saveUnsentAnswer();
 
         stopTimer();
 
-        // Stop the avatar mid-sentence
-        if ("speechSynthesis" in window) {
-            speechSynthesis.cancel();
+        // Stop the avatar mid-sentence and return it to neutral
+        if (typeof stopAvatarSpeech === "function") {
+            stopAvatarSpeech();
         }
 
         await submitExam();
@@ -298,27 +316,30 @@ window.submitExam = submitExam;
 // STUDENT: PICKING AND ASKING QUESTIONS
 // ==========================================
 
-// Add an entire category
-// (uses the questions loaded from the server for this test code)
-function addCategory(category) {
-
-    const questions = exam.testQuestions[category];
-
-    if (!questions || questions.length === 0) {
-
-        if (el.questionText) {
-            el.questionText.textContent =
-                `No questions available in the ${category} category.`;
+// Speaks text with the animated avatar. If the avatar script failed to
+// load (or throws), the exam keeps working without speech.
+function safeSpeak(text) {
+    try {
+        if (typeof speakAsAvatar === "function") {
+            speakAsAvatar(text);
+        } else {
+            console.warn("speakAsAvatar is not loaded. Check js/avatar-speech.js");
         }
-
-        return;
+    } catch (error) {
+        console.error("Avatar speech failed:", error);
     }
+}
 
-    // Add questions that have not already been selected
-    questions.forEach(question => {
-        if (!state.selectedQuestions.includes(question)) {
-            state.selectedQuestions.push(question);
-        }
+// Load every question from every category into one random pool.
+// Each question keeps its own category for the exam log.
+function addAllQuestions() {
+
+    const all = exam.testQuestions || {};
+
+    Object.keys(all).forEach(category => {
+        (all[category] || []).forEach(text => {
+            state.selectedQuestions.push({ category, text });
+        });
     });
 }
 
@@ -330,23 +351,9 @@ function askNextQuestion() {
         return;
     }
 
-    if (state.selectedQuestions.length === 0) {
-        el.questionText.textContent = "No more questions available.";
-        return;
-    }
-    // Display and speak the question with the animated avatar
-    el.questionText.textContent = picked.text;
-
-    speakAsAvatar(picked.text);
-
-    // Save an answer that was typed or spoken
-    // for the previous question but never evaluated
-    if (exam.current && el.responseBox) {
-        recordAnswer(
-            el.questionText.textContent,
-            el.responseBox.value.trim()
-        );
-    }
+    // Save the answer to the previous question BEFORE the question
+    // text on screen is replaced
+    saveUnsentAnswer();
 
     if (state.selectedQuestions.length === 0) {
         el.questionText.textContent =
@@ -366,21 +373,20 @@ function askNextQuestion() {
         Math.random() * state.selectedQuestions.length
     );
 
-    const question = state.selectedQuestions.splice(randomIndex, 1)[0];
+    const picked = state.selectedQuestions.splice(randomIndex, 1)[0];
 
     // Start a new entry in the exam log
     exam.current = {
-        category: currentCategory,
-        question: question,
+        category: picked.category,
+        question: picked.text,
         exchanges: []
     };
 
     exam.log.push(exam.current);
+    exam.lastRecordedAnswer = null;
 
-    // Display and speak the question
-    el.questionText.textContent = question;
-
-    speakQuestion(question);
+    // Display the question
+    el.questionText.textContent = picked.text;
 
     // Enable response controls
     if (el.responseBox) {
@@ -399,31 +405,38 @@ function askNextQuestion() {
     if (el.evaluationBox) {
         el.evaluationBox.innerHTML = "<p>Waiting for student response...</p>";
     }
+
+    // Speak the question last, so a speech problem can't block the controls
+    safeSpeak(picked.text);
 }
 
+// Next question button
+on(el.nextButton, "click", askNextQuestion);
 
-// Category buttons
-on(el.objective, "click", () => {
-    currentCategory = "objective";
-    addCategory("objective");
-    askNextQuestion();
-});
-
-on(el.semiButton, "click", () => {
-    currentCategory = "semi";
-    addCategory("semi");
-    askNextQuestion();
-});
-
-on(el.qualatativeButton, "click", () => {
-    currentCategory = "qualitative";
-    addCategory("qualitative");
-    askNextQuestion();
-});
 
 // ==========================================
 // STUDENT: AI EVALUATION (follow-up questions)
 // ==========================================
+
+// Adds one line of text to the evaluation box.
+// Uses textContent so AI output can't inject HTML.
+// If "label" is given, it is shown in bold before the text.
+function addEvaluationLine(tag, text, label) {
+
+    const node = document.createElement(tag);
+
+    if (label) {
+        const strong = document.createElement("strong");
+        strong.textContent = label;
+        node.appendChild(strong);
+        node.appendChild(document.createTextNode(" " + text));
+    } else {
+        node.textContent = text;
+    }
+
+    el.evaluationBox.appendChild(node);
+}
+
 
 async function handleEvaluate() {
 
@@ -441,6 +454,7 @@ async function handleEvaluate() {
 
     // Record this answer for grading at the end of the exam
     recordAnswer(originalQuestion, answer);
+    exam.lastRecordedAnswer = answer;
 
     // Show loading
     el.evaluationBox.innerHTML = "<p>AI is thinking...</p>";
@@ -461,10 +475,12 @@ async function handleEvaluate() {
                     "Content-Type": "application/json"
                 },
 
+
                 body: JSON.stringify({
                     originalQuestion: originalQuestion,
                     studentResponse: answer,
-                    category: currentCategory
+                    category: exam.current ? exam.current.category : "",
+                    gradingGuidelines: exam.gradingGuidelines || ""
                 })
 
             }
@@ -478,34 +494,41 @@ async function handleEvaluate() {
 
         console.log("AI RESPONSE:", data);
 
-        // ---------- FOLLOW-UP QUESTION ----------
-        if (data.needsFollowUp && data.followUpQuestion) {
+        const feedback = data.evaluation || data.feedback || "";
+        const hasFollowUp = Boolean(
+            data.needsFollowUp && data.followUpQuestion
+        );
 
-            el.evaluationBox.innerHTML = `
-                <h4>Follow-up Question</h4>
-                <p>${data.followUpQuestion}</p>
-            `;
+        // Print the AI's response
+        el.evaluationBox.innerHTML = "";
 
-            // Show follow-up and clear the answer box
-            el.questionText.textContent = data.followUpQuestion;
+        addEvaluationLine(
+            "h4",
+            hasFollowUp ? "Follow-up Question" : "AI Evaluation"
+        );
 
-            el.responseBox.value = "";
-
-            
-            // Speak follow-up with the animated avatar
-            speakAsAvatar(data.followUpQuestion);
-
+        if (feedback) {
+            addEvaluationLine("p", feedback);
         }
 
-        // ---------- NO FOLLOW-UP ----------
-        else {
+        if (data.score !== undefined && data.score !== null) {
+            addEvaluationLine("p", String(data.score), "Score:");
+        }
 
-            el.evaluationBox.innerHTML = `
-                <h4>AI Evaluation</h4>
-                <p>${data.evaluation}</p>
-                <p><strong>Score:</strong> ${data.score}</p>
-                <p>No follow-up question is needed.</p>
-            `;
+        if (hasFollowUp) {
+
+            addEvaluationLine("p", data.followUpQuestion, "Follow-up:");
+
+            // Show follow-up as the current question and clear the answer box
+            el.questionText.textContent = data.followUpQuestion;
+            el.responseBox.value = "";
+
+            // Speak follow-up with the animated avatar
+            safeSpeak(data.followUpQuestion);
+
+        } else {
+
+            addEvaluationLine("p", "No follow-up question is needed.");
 
         }
 

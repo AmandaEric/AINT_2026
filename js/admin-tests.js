@@ -1,790 +1,714 @@
-/*
- * ============================================================
- * admin-tests.js - EVERYTHING ADMINS DO WITH TESTS
- * The draft question bank, creating a test, the My Tests list,
- * viewing results, editing an existing test, the admin menu buttons,
- * and initAdminPage() (checks the saved login on page load).
- * ============================================================
- */
 
-// ==========================================
-// ADMIN: QUESTION BANK (the draft list before a test is created)
-// ==========================================
+/* ==========================================================
+   AINT ADMIN TESTS
+   - Add, display, and remove questions
+   - Add, display, and remove grading guidelines
+   - Create tests
+   - View existing tests
+   - Edit test names, questions, and grading guidelines
+   ========================================================== */
 
-// Save questions to the browser
-function saveQuestions() {
-    localStorage.setItem(
-        "aintQuestions",
-        JSON.stringify(state.questions)
-    );
-}
-
-
-// Add a question
-function addQuestion(category, input) {
-
-    if (!input) {
-        return;
-    }
-
-    const question = input.value.trim();
-
-    if (question === "") {
-        alert("Please enter a question.");
-        return;
-    }
-
-    state.questions[category].push(question);
-
-    saveQuestions();
-
-    // Clear input and show the new question right away
-    input.value = "";
-
-    displayQuestions();
-
-    console.log("Added question:", question);
-}
-
-
-// Delete one question
-function deleteQuestion(category, index) {
-
-    state.questions[category].splice(index, 1);
-
-    saveQuestions();
-
-    displayQuestions();
-}
-
-
-// Delete all questions
-function clearAllQuestions() {
-
-    const confirmed = confirm(
-        "Are you sure you want to delete ALL questions?"
-    );
-
-    if (!confirmed) {
-        return;
-    }
-
-    state.questions = {
-        objective: [],
-        semi: [],
-        qualitative: []
+   (() => {
+    "use strict";
+    const API = BACKEND_URL;   // defined in core.js
+    const categories = {
+        objective: {
+            input: "objectiveInput",
+            button: "objectiveAdd",
+            list: "objectiveList",
+            label: "Objective",
+        },
+        semi: {
+            input: "semiInput",
+            button: "semiAdd",
+            list: "semiList",
+            label: "Semi-Objective",
+        },
+        qualitative: {
+            input: "qualitativeInput",
+            button: "qualitativeAdd",
+            list: "qualitativeList",
+            label: "Qualitative",
+        },
     };
 
-    saveQuestions();
+    let questions = {
+        objective: [],
+        semi: [],
+        qualitative: [],
+    };
 
-    displayQuestions();
+    // Guidelines are stored as an array in the browser
+    // and joined into one string when sent to server.js.
+    let guidelineItems = [];
+
+    let currentTestCode = null;
+    let currentTestName = "";
+    let currentTestGuidelines = "";
+    let editingTest = false;
+
+    const $ = (id) => document.getElementById(id);
+
+    function getToken() {
+        // admin-login.js keeps the login token here
+        return sessionStorage.getItem("adminToken") || "";
+    }
+
+    async function api(path, options = {}) {
+        const token = getToken();
+        if (!token) {
+    throw new Error("You are not logged in. Please log in again.");
 }
 
-
-// Display all question categories
-function displayQuestions() {
-    displayCategory(el.objectiveList, "objective");
-    displayCategory(el.semiList, "semi");
-    displayCategory(el.qualitativeList, "qualitative");
-}
-
-
-// Display one category
-function displayCategory(listElement, category) {
-
-    if (!listElement) {
-        return;
-    }
-
-    // Clear current display
-    listElement.innerHTML = "";
-
-    // Display each question
-    state.questions[category].forEach((question, index) => {
-
-        const row = document.createElement("div");
-
-        row.className = "saved-question";
-
-        row.innerHTML = `
-            <p>${question}</p>
-            <button
-                type="button"
-                onclick="deleteQuestion('${category}', ${index})">
-                Delete
-            </button>
-        `;
-
-        listElement.appendChild(row);
-    });
-}
-
-// Make deleteQuestion available to the generated buttons
-window.deleteQuestion = deleteQuestion;
-
-
-// ------------------------------------------
-// BUTTONS
-// ------------------------------------------
-
-on(el.objectiveAdd, "click", () => addQuestion("objective", el.objectiveInput));
-
-on(el.semiAdd, "click", () => addQuestion("semi", el.semiInput));
-
-on(el.qualitativeAdd, "click", () => addQuestion("qualitative", el.qualitativeInput));
-
-on(el.clearQuestions, "click", clearAllQuestions);
-
-// Display saved questions when the page loads
-displayQuestions();
-
-// ==========================================
-// ADMIN: CREATE A TEST
-// ==========================================
-
-// Sends the questions the admin entered to the server.
-// The server saves them under the logged-in email
-// and answers with the test code.
-async function createTest() {
-
-    if (!el.createdTest) {
-        return;
-    }
-
-    const total =
-        state.questions.objective.length +
-        state.questions.semi.length +
-        state.questions.qualitative.length;
-
-    if (total === 0) {
-        alert("Add at least one question first.");
-        return;
-    }
-
-    const name =
-        el.testName
-            ? el.testName.value.trim()
-            : "";
-
-    if (el.createTest) {
-        el.createTest.disabled = true;
-    }
-
-    try {
-
-        const response = await adminFetch(
-            "/api/tests",
-            {
-
-                method: "POST",
-
-                body: JSON.stringify({
-                    name: name,
-                    questions: state.questions
-                })
-
-            }
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(
-                data.error || `Server responded with ${response.status}`
-            );
-        }
-
-        el.createdTest.innerHTML = `
-
-            <h4>Test created</h4>
-
-            <p>
-                Give this code to your students:
-                <strong style="font-size: 1.6em; letter-spacing: 3px;">
-                    ${escapeHtml(data.code)}
-                </strong>
-            </p>
-
-            <p>
-                Results are emailed to ${escapeHtml(admin.email)}
-                and saved under "My Tests" below.
-            </p>
-
-        `;
-
-        // The questions now live on the server, so clear the
-        // draft to keep it from mixing into the next test
-        state.questions = {
-            objective: [],
-            semi: [],
-            qualitative: []
+        const headers = {
+            ...(options.body ? { "Content-Type": "application/json" } : {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(options.headers || {}),
         };
 
-        saveQuestions();
-
-        displayQuestions();
-
-        if (el.testName) {
-            el.testName.value = "";
+        const response = await fetch(`${API}${path}`, {
+            ...options,
+            headers,
+        });
+        if (response.status === 401) {
+            if (typeof logoutAdmin === "function") {
+                logoutAdmin(false);
+            }
+        
+            if (typeof setLoginMessage === "function") {
+                setLoginMessage("Your session expired. Please log in again.");
+            }
+        
+            throw new Error("Your session expired. Please log in again.");
         }
 
-    } catch (error) {
-
-        console.error("CREATE TEST ERROR:", error);
-
-        el.createdTest.innerHTML =
-            `<p>Could not create the test: ${escapeHtml(error.message)}</p>`;
-
-    }
-
-    if (el.createTest) {
-        el.createTest.disabled = false;
-    }
-}
-
-
-on(el.createTest, "click", createTest);
-
-// ==========================================
-// ADMIN: MY TESTS (list) + RESULTS FOR ONE TEST
-// ==========================================
-
-async function loadMyTests() {
-
-    if (!el.myTests) {
-        return;
-    }
-
-    el.myTests.innerHTML = "<p>Loading your tests...</p>";
-
-    try {
-
-        const response = await adminFetch("/api/admin/tests");
-
-        if (!response.ok) {
-            throw new Error(`Server responded with ${response.status}`);
+        let data;
+        try {
+            data = await response.json();
+        } catch {
+            throw new Error(`Server returned an invalid response (${response.status}).`);
         }
 
-        const data = await response.json();
+        if (!response.ok || data.success === false) {
+            throw new Error(data.error || `Request failed (${response.status}).`);
+        }
 
-        if (data.tests.length === 0) {
-            el.myTests.innerHTML = "<p>You haven't created any tests yet.</p>";
+        return data;
+    }
+
+    function showMessage(id, message, isError = false) {
+        const element = $(id);
+        if (!element) return;
+
+        element.textContent = message;
+        element.style.color = isError ? "#c62828" : "";
+    }
+
+    function makeButton(label, className, onClick) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = label;
+        if (className) button.className = className;
+        button.addEventListener("click", onClick);
+        return button;
+    }
+
+    /* ----------------------------------------------------------
+       QUESTIONS
+       ---------------------------------------------------------- */
+
+    function renderQuestions(category) {
+        const config = categories[category];
+        const list = $(config.list);
+        if (!list) return;
+
+        list.replaceChildren();
+
+        questions[category].forEach((question, index) => {
+            const item = document.createElement("div");
+            item.className = "admin-list-item";
+
+            const text = document.createElement("span");
+            text.textContent = `${index + 1}. ${question.text}`;
+
+            const remove = makeButton("Remove", "remove-question", () => {
+                if (question.id && currentTestCode && editingTest) {
+                    deleteSavedQuestion(category, question, item);
+                    return;
+                }
+
+                questions[category].splice(index, 1);
+                renderQuestions(category);
+            });
+
+            item.append(text, remove);
+            list.appendChild(item);
+        });
+    }
+
+    function addQuestion(category) {
+        const config = categories[category];
+        const input = $(config.input);
+
+        if (!input) return;
+
+        const text = input.value.trim();
+
+        if (!text) {
+            input.focus();
             return;
         }
 
-        el.myTests.innerHTML = data.tests.map(function (t) {
-
-            return `
-
-                <div class="saved-question">
-
-                    <p>
-                        <strong>${escapeHtml(t.name || "Untitled test")}</strong>
-                        &mdash; code
-                        <strong>${escapeHtml(t.code)}</strong>
-                    </p>
-
-                    <p>
-                        ${t.questionCount} questions
-                        &mdash; ${t.submitted} submitted
-                        ${t.average !== null
-                            ? "&mdash; average " + t.average + "%"
-                            : ""}
-                        &mdash; created
-                        ${escapeHtml(new Date(t.createdAt).toLocaleDateString())}
-                    </p>
-
-                    <button
-                        type="button"
-                        data-action="results"
-                        data-code="${escapeHtml(t.code)}">
-
-                        View results
-
-                    </button>
-
-                    <button
-                        type="button"
-                        data-action="edit"
-                        data-code="${escapeHtml(t.code)}">
-
-                        Edit questions
-
-                    </button>
-
-                </div>
-
-            `;
-
-        }).join("");
-
-    } catch (error) {
-
-        console.error("LOAD TESTS ERROR:", error);
-
-        // adminFetch already handled an expired session
-        if (admin.token) {
-            el.myTests.innerHTML =
-                "<p>Could not load your tests. Is the backend running?</p>";
+        if (text.length > 1000) {
+            alert("Questions can be at most 1000 characters.");
+            return;
         }
 
-    }
-}
+        if (editingTest && currentTestCode) {
+            addSavedQuestion(category, text);
+            return;
+        }
 
-
-// One listener for every button in the My Tests list
-on(el.myTests, "click", function (event) {
-
-    const button = event.target.closest("button[data-code]");
-
-    if (!button) {
-        return;
+        questions[category].push({ text });
+        input.value = "";
+        renderQuestions(category);
+        input.focus();
     }
 
-    if (button.dataset.action === "edit") {
-        loadEditView(button.dataset.code);
-    } else {
-        loadResults(button.dataset.code);
+    async function addSavedQuestion(category, text) {
+        try {
+            await api(
+                `/api/tests/${encodeURIComponent(currentTestCode)}/questions`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({ category, text }),
+                }
+            );
+
+            const input = $(categories[category].input);
+            if (input) input.value = "";
+
+            await loadTestForEditing(currentTestCode);
+        } catch (error) {
+            alert(`Could not add question: ${error.message}`);
+        }
     }
 
-});
+    async function deleteSavedQuestion(category, question, item) {
+        if (!confirm("Delete this question permanently?")) return;
 
+        try {
+            await api(
+                `/api/tests/${encodeURIComponent(currentTestCode)}/questions/${question.id}`,
+                { method: "DELETE" }
+            );
 
-// ------------------------------------------
-// RESULTS FOR ONE TEST
-// ------------------------------------------
+            questions[category] = questions[category].filter(
+                (q) => q.id !== question.id
+            );
 
-async function loadResults(code) {
-
-    if (!el.resultsList) {
-        return;
+            renderQuestions(category);
+        } catch (error) {
+            alert(`Could not delete question: ${error.message}`);
+        }
     }
 
-    // Only one of the two views shows at a time
-    if (el.editView) {
-        el.editView.innerHTML = "";
-        el.editView.dataset.code = "";
+    function resetQuestions() {
+        questions = {
+            objective: [],
+            semi: [],
+            qualitative: [],
+        };
+
+        for (const category of Object.keys(categories)) {
+            const input = $(categories[category].input);
+            if (input) input.value = "";
+            renderQuestions(category);
+        }
     }
 
-    el.resultsList.innerHTML = "<p>Loading results...</p>";
+    /* ----------------------------------------------------------
+       GRADING GUIDELINES
+       This is the part that makes guidelinesList display items.
+       ---------------------------------------------------------- */
 
-    try {
+    function renderGuidelines() {
+        const list = $("guidelinesList");
+        if (!list) {
+            console.error('Could not find element with id="guidelinesList".');
+            return;
+        }
 
-        const response = await adminFetch(
-            `/api/tests/${encodeURIComponent(code)}/results`
+        list.replaceChildren();
+
+        if (guidelineItems.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "guidelines-empty";
+            empty.textContent = "No additional instructions added yet.";
+            list.appendChild(empty);
+            return;
+        }
+
+        guidelineItems.forEach((guideline, index) => {
+            const item = document.createElement("div");
+            item.className = "guideline-item";
+
+            const text = document.createElement("span");
+            text.textContent = `${index + 1}. ${guideline}`;
+
+            const remove = makeButton("Remove", "remove-guideline", () => {
+                guidelineItems.splice(index, 1);
+                renderGuidelines();
+            });
+
+            item.append(text, remove);
+            list.appendChild(item);
+        });
+    }
+
+    function addGuideline() {
+        const input = $("grading_guidelines");
+        if (!input) {
+            console.error('Could not find element with id="grading_guidelines".');
+            return;
+        }
+
+        const text = input.value.trim();
+
+        if (!text) {
+            input.focus();
+            return;
+        }
+
+        if (text.length > 5000) {
+            alert("Guidelines can be at most 5000 characters each.");
+            return;
+        }
+
+        const totalLength = guidelineItems.reduce(
+            (total, item) => total + item.length + 1,
+            0
         );
 
-        if (response.status === 404) {
-            el.resultsList.innerHTML = "<p>Test not found.</p>";
+        if (totalLength + text.length > 5000) {
+            alert("The combined grading guidelines cannot exceed 5000 characters.");
             return;
         }
 
-        if (!response.ok) {
-            throw new Error(`Server responded with ${response.status}`);
-        }
+        guidelineItems.push(text);
+        input.value = "";
+        renderGuidelines();
+        input.focus();
+    }
 
-        const data = await response.json();
+    function resetGuidelines() {
+        guidelineItems = [];
 
-        const subs = data.submissions;
+        const input = $("grading_guidelines");
+        if (input) input.value = "";
 
-        const title =
-            `<h3>${escapeHtml(data.name || "Untitled test")} ` +
-            `(${escapeHtml(data.code)})</h3>`;
+        renderGuidelines();
+    }
 
-        if (subs.length === 0) {
-            el.resultsList.innerHTML =
-                title + "<p>No students have submitted yet.</p>";
+    function getGuidelinesString() {
+        return guidelineItems.join("\n");
+    }
+
+    function loadGuidelinesString(value) {
+        const text = String(value || "").trim();
+
+        // Existing tests may have guidelines stored as multiple lines.
+        guidelineItems = text
+            ? text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+            : [];
+
+        renderGuidelines();
+    }
+
+    /* ----------------------------------------------------------
+       CREATE TEST
+       ---------------------------------------------------------- */
+
+    async function createTest() {
+        const button = $("createTest");
+        const name = $("testName")?.value.trim() || "";
+
+        const questionPayload = {
+            objective: questions.objective.map((q) => q.text),
+            semi: questions.semi.map((q) => q.text),
+            qualitative: questions.qualitative.map((q) => q.text),
+        };
+
+        const totalQuestions = Object.values(questionPayload)
+            .reduce((total, group) => total + group.length, 0);
+
+        if (totalQuestions === 0) {
+            alert("Please add at least one question before creating the test.");
             return;
         }
 
-        // Class average (only graded exams)
-        const graded = subs.filter(function (s) {
-            return s.percent !== null;
+        if (button) button.disabled = true;
+        showMessage("createdTest", "Creating test...");
+
+        try {
+            const data = await api("/api/tests", {
+                method: "POST",
+                body: JSON.stringify({
+                    name,
+                    questions: questionPayload,
+                    grading_guidelines: getGuidelinesString(),
+                }),
+            });
+
+            const output = $("createdTest");
+            if (output) {
+                output.replaceChildren();
+
+                const message = document.createElement("p");
+                message.textContent = "Test created successfully! Test code: ";
+
+                const code = document.createElement("strong");
+                code.textContent = data.code;
+
+                message.appendChild(code);
+                output.appendChild(message);
+            }
+
+            currentTestCode = null;
+            editingTest = false;
+
+            resetQuestions();
+            resetGuidelines();
+
+            if ($("testName")) $("testName").value = "";
+        } catch (error) {
+            showMessage("createdTest", error.message, true);
+        } finally {
+            if (button) button.disabled = false;
+        }
+    }
+
+    /* ----------------------------------------------------------
+       VIEW EXISTING TESTS
+       ---------------------------------------------------------- */
+
+    async function loadTests() {
+        const container = $("myTests");
+        if (!container) return;
+
+        container.textContent = "Loading tests...";
+
+        try {
+            const data = await api("/api/admin/tests");
+            container.replaceChildren();
+
+            if (!data.tests || data.tests.length === 0) {
+                container.textContent = "You haven't created any tests yet.";
+                return;
+            }
+
+            data.tests.forEach((test) => {
+                const card = document.createElement("div");
+                card.className = "test-card";
+
+                const heading = document.createElement("h3");
+                heading.textContent = test.name || "Untitled test";
+
+                const details = document.createElement("p");
+                details.textContent =
+                    `Code: ${test.code} | Questions: ${test.questionCount} | ` +
+                    `Submissions: ${test.submitted}`;
+
+                const editButton = makeButton("Edit Test", "", async () => {
+                    await loadTestForEditing(test.code);
+                });
+
+                const resultsButton = makeButton("View Results", "", async () => {
+                    await loadResults(test.code);
+                });
+
+                card.append(heading, details, editButton, resultsButton);
+                container.appendChild(card);
+            });
+        } catch (error) {
+            container.textContent = `Could not load tests: ${error.message}`;
+        }
+    }
+
+    async function loadTestForEditing(code) {
+        try {
+            const test = await api(
+                `/api/tests/${encodeURIComponent(code)}/edit`
+            );
+
+            currentTestCode = test.code;
+            currentTestName = test.name || "";
+            currentTestGuidelines = test.gradingGuidelines || "";
+            editingTest = true;
+
+            questions = {
+                objective: (test.questions.objective || []).map((q) => ({
+                    id: q.id,
+                    text: q.text,
+                })),
+                semi: (test.questions.semi || []).map((q) => ({
+                    id: q.id,
+                    text: q.text,
+                })),
+                qualitative: (test.questions.qualitative || []).map((q) => ({
+                    id: q.id,
+                    text: q.text,
+                })),
+            };
+
+            for (const category of Object.keys(categories)) {
+                renderQuestions(category);
+            }
+
+            loadGuidelinesString(currentTestGuidelines);
+
+            const editView = $("editView");
+            if (editView) {
+                editView.replaceChildren();
+
+                const heading = document.createElement("h3");
+                heading.textContent = `Editing test: ${test.name || test.code}`;
+
+                const codeText = document.createElement("p");
+                codeText.textContent = `Test code: ${test.code}`;
+
+                const nameLabel = document.createElement("label");
+                nameLabel.htmlFor = "editTestName";
+                nameLabel.textContent = "Test name";
+
+                const nameInput = document.createElement("input");
+                nameInput.id = "editTestName";
+                nameInput.type = "text";
+                nameInput.maxLength = 255;
+                nameInput.value = currentTestName;
+                nameInput.placeholder = "Test name";
+
+                const guidelinesHeading = document.createElement("h4");
+                guidelinesHeading.textContent = "Grading guidelines";
+
+                const guidelinesInput = document.createElement("textarea");
+                guidelinesInput.id = "editTestGuidelines";
+                guidelinesInput.rows = 5;
+                guidelinesInput.maxLength = 5000;
+                guidelinesInput.value = currentTestGuidelines;
+                guidelinesInput.placeholder =
+                    "Enter the grading guidelines for this test...";
+
+                const save = makeButton("Save Test Details", "", async () => {
+                    await saveTestDetails();
+                });
+
+                const cancel = makeButton("Close Editor", "", () => {
+                    editView.replaceChildren();
+                    currentTestCode = null;
+                    editingTest = false;
+                    resetQuestions();
+                    resetGuidelines();
+                });
+
+                editView.append(
+                    heading,
+                    codeText,
+                    nameLabel,
+                    nameInput,
+                    guidelinesHeading,
+                    guidelinesInput,
+                    save,
+                    cancel
+                );
+
+                editView.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+        } catch (error) {
+            alert(`Could not open test: ${error.message}`);
+        }
+    }
+
+    async function saveTestDetails() {
+        if (!currentTestCode) return;
+
+        const name = $("editTestName")?.value.trim() || "";
+        const guidelines = $("editTestGuidelines")?.value.trim() || "";
+
+        try {
+            // Your current PATCH route only saves the test name.
+            await api(`/api/tests/${encodeURIComponent(currentTestCode)}`, {
+                method: "PATCH",
+                body: JSON.stringify({ name, grading_guidelines: guidelines }),
+            });
+
+            currentTestName = name;
+            currentTestGuidelines = guidelines;
+
+            showMessage("editView", "Test details saved.");
+            await loadTests();
+        } catch (error) {
+            alert(`Could not save test details: ${error.message}`);
+        }
+    }
+
+    async function loadResults(code) {
+        const container = $("resultsList");
+        if (!container) return;
+
+        container.textContent = "Loading results...";
+
+        try {
+            const data = await api(
+                `/api/tests/${encodeURIComponent(code)}/results`
+            );
+
+            container.replaceChildren();
+
+            const heading = document.createElement("h3");
+            heading.textContent = `Results: ${data.name || data.code}`;
+            container.appendChild(heading);
+
+            if (!data.submissions.length) {
+                const empty = document.createElement("p");
+                empty.textContent = "No student submissions yet.";
+                container.appendChild(empty);
+                return;
+            }
+
+            data.submissions.forEach((submission) => {
+                const card = document.createElement("div");
+                card.className = "result-card";
+
+                const title = document.createElement("h4");
+                title.textContent = submission.studentName;
+
+                const score = document.createElement("p");
+                score.textContent = submission.gradingFailed
+                    ? "Grading failed; answers were saved."
+                    : `Score: ${submission.percent}%`;
+
+                const summary = document.createElement("p");
+                summary.textContent = submission.summary || "";
+
+                card.append(title, score, summary);
+
+                (submission.questions || []).forEach((q, index) => {
+                    const question = document.createElement("p");
+                    question.textContent =
+                        `${index + 1}. ${q.question || ""}` +
+                        (q.score !== undefined ? ` — ${q.score}/10` : "") +
+                        (q.feedback ? ` | ${q.feedback}` : "");
+
+                    card.appendChild(question);
+                });
+
+                container.appendChild(card);
+            });
+        } catch (error) {
+            container.textContent = `Could not load results: ${error.message}`;
+        }
+    }
+
+    /* ----------------------------------------------------------
+       NAVIGATION
+       ---------------------------------------------------------- */
+
+    function showScreen(screenId) {
+        const screens = [
+            "adminMenu",
+            "createScreen",
+            "testsScreen",
+        ];
+
+        screens.forEach((id) => {
+            const screen = $(id);
+            if (screen) screen.hidden = id !== screenId;
+        });
+    }
+
+    function startNewTest() {
+        currentTestCode = null;
+        editingTest = false;
+
+        resetQuestions();
+        resetGuidelines();
+
+        if ($("testName")) $("testName").value = "";
+        showMessage("createdTest", "");
+
+        showScreen("createScreen");
+    }
+
+    function initialize() {
+        // Add-question buttons.
+        for (const [category, config] of Object.entries(categories)) {
+            $(config.button)?.addEventListener("click", () => {
+                addQuestion(category);
+            });
+
+            $(config.input)?.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    addQuestion(category);
+                }
+            });
+        }
+
+        // Grading guideline buttons and input.
+        $("guidelinesAdd")?.addEventListener("click", addGuideline);
+
+        $("grading_guidelines")?.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                addGuideline();
+            }
         });
 
-        const average = graded.length
-            ? Math.round(
-                graded.reduce(function (sum, s) {
-                    return sum + s.percent;
-                }, 0) / graded.length
-            )
-            : null;
+        // Create test.
+        $("createTest")?.addEventListener("click", createTest);
 
-        const header =
-            title +
-            `<p>${subs.length} submitted` +
-            (average !== null
-                ? ` &mdash; class average ${average}%`
-                : "") +
-            "</p>";
+        // Clear all questions and guidelines.
+        document.querySelector(".clearQuestion")?.addEventListener("click", () => {
+            if (!confirm("Clear all questions and grading guidelines?")) return;
+            resetQuestions();
+            resetGuidelines();
+        });
 
-        el.resultsList.innerHTML = header + subs.map(function (r) {
+        // Navigation.
+        $("menuCreateButton")?.addEventListener("click", startNewTest);
 
-            const score = r.gradingFailed
-                ? "Grading failed (answers saved)"
-                : r.percent + "%";
+        $("menuViewButton")?.addEventListener("click", async () => {
+            showScreen("testsScreen");
+            await loadTests();
+        });
 
-            const details = r.questions.map(function (q, i) {
+        $("createBackButton")?.addEventListener("click", () => {
+            showScreen("adminMenu");
+        });
 
-                const answers =
-                    (q.exchanges || []).map(function (e) {
+        $("testsBackButton")?.addEventListener("click", () => {
+            showScreen("adminMenu");
+        });
 
-                        return "<p><em>" +
-                            escapeHtml(e.question) +
-                            "</em><br>" +
-                            escapeHtml(e.answer) +
-                            "</p>";
+        // Display the empty guidelines state immediately.
+        renderGuidelines();
 
-                    }).join("") ||
-                    "<p><em>No answer given</em></p>";
-
-                return "<div><strong>" +
-                    (i + 1) + ". " +
-                    escapeHtml(q.question) +
-                    "</strong>" +
-                    (q.score !== undefined
-                        ? " &mdash; " + q.score + "/10"
-                        : "") +
-                    answers +
-                    (q.feedback
-                        ? "<p>" + escapeHtml(q.feedback) + "</p>"
-                        : "") +
-                    "</div>";
-
-            }).join("");
-
-            return "<details class='saved-question'>" +
-                "<summary><strong>" +
-                escapeHtml(r.studentName) +
-                "</strong> &mdash; " + score +
-                " &mdash; " +
-                escapeHtml(new Date(r.submittedAt).toLocaleString()) +
-                (r.emailSent ? "" : " &mdash; email not sent") +
-                "</summary>" +
-                (r.summary
-                    ? "<p>" + escapeHtml(r.summary) + "</p>"
-                    : "") +
-                details +
-                "</details>";
-
-        }).join("");
-
-    } catch (error) {
-
-        console.error(error);
-
-        if (admin.token) {
-            el.resultsList.innerHTML =
-                "<p>Could not load results. Is the backend running?</p>";
-        }
-
-    }
-}
-
-// ==========================================
-// ADMIN: EDIT AN EXISTING TEST
-// ==========================================
-
-const CATEGORY_LABELS = {
-    objective: "Objective",
-    semi: "Semi-objective",
-    qualitative: "Qualitative"
-};
-
-
-// Sends an add / delete / rename request and reports any error
-async function sendEdit(path, method, body) {
-
-    const response = await adminFetch(
-        path,
-        {
-            method: method,
-            body: body ? JSON.stringify(body) : undefined
-        }
-    );
-
-    if (!response.ok) {
-
-        const data =
-            await response.json().catch(function () { return {}; });
-
-        throw new Error(
-            data.error || `Server responded with ${response.status}`
-        );
-
-    }
-}
-
-
-async function loadEditView(code) {
-
-    if (!el.editView) {
-        return;
+        // Initial screen is controlled by the admin login script.
     }
 
-    // Only one of the two views shows at a time
-    if (el.resultsList) {
-        el.resultsList.innerHTML = "";
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initialize);
+    } else {
+        initialize();
     }
 
-    el.editView.innerHTML = "<p>Loading test...</p>";
-
-    try {
-
-        const response = await adminFetch(
-            `/api/tests/${encodeURIComponent(code)}/edit`
-        );
-
-        if (response.status === 404) {
-            el.editView.innerHTML = "<p>Test not found.</p>";
-            return;
-        }
-
-        if (!response.ok) {
-            throw new Error(`Server responded with ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        el.editView.dataset.code = data.code;
-
-        const sections = Object.keys(CATEGORY_LABELS).map(function (cat) {
-
-            const label = CATEGORY_LABELS[cat];
-
-            const items =
-                data.questions[cat].map(function (q) {
-
-                    return `
-
-                        <div class="saved-question">
-
-                            <p>${escapeHtml(q.text)}</p>
-
-                            <button
-                                type="button"
-                                data-action="delete-question"
-                                data-id="${Number(q.id)}">
-
-                                Delete
-
-                            </button>
-
-                        </div>
-
-                    `;
-
-                }).join("") ||
-                "<p><em>No questions in this category.</em></p>";
-
-            return `
-
-                <h4>${label}</h4>
-
-                ${items}
-
-                <input
-                    type="text"
-                    id="editInput-${cat}"
-                    placeholder="Add a ${label.toLowerCase()} question">
-
-                <button
-                    type="button"
-                    data-action="add-question"
-                    data-category="${cat}">
-
-                    Add Question
-
-                </button>
-
-            `;
-
-        }).join("");
-
-        const warning = data.submitted > 0
-            ? `<p><em>${data.submitted} student(s) have already taken this test.
-               Their results keep the questions they were asked.
-               Changes only affect students who take it from now on.</em></p>`
-            : "";
-
-        el.editView.innerHTML = `
-
-            <h3>Editing: ${escapeHtml(data.name || "Untitled test")}
-                (${escapeHtml(data.code)})</h3>
-
-            ${warning}
-
-            <input
-                type="text"
-                id="editName"
-                placeholder="Test name"
-                value="${escapeHtml(data.name)}">
-
-            <button
-                type="button"
-                data-action="rename">
-
-                Save name
-
-            </button>
-
-            ${sections}
-
-        `;
-
-    } catch (error) {
-
-        console.error("LOAD EDIT ERROR:", error);
-
-        if (admin.token) {
-            el.editView.innerHTML =
-                "<p>Could not load the test. Is the backend running?</p>";
-        }
-
-    }
-}
-
-
-// One listener for every button inside the edit view
-on(el.editView, "click", async function (event) {
-
-    const button = event.target.closest("button[data-action]");
-
-    if (!button) {
-        return;
-    }
-
-    const code = el.editView.dataset.code;
-
-    const encoded = encodeURIComponent(code);
-
-    const action = button.dataset.action;
-
-    button.disabled = true;
-
-    try {
-
-        if (action === "add-question") {
-
-            const category = button.dataset.category;
-
-            const input =
-                document.getElementById("editInput-" + category);
-
-            const text = input ? input.value.trim() : "";
-
-            if (text === "") {
-                alert("Please enter a question.");
-                return;
-            }
-
-            await sendEdit(
-                `/api/tests/${encoded}/questions`,
-                "POST",
-                { category: category, text: text }
-            );
-
-        } else if (action === "delete-question") {
-
-            if (!confirm("Delete this question?")) {
-                return;
-            }
-
-            await sendEdit(
-                `/api/tests/${encoded}/questions/${button.dataset.id}`,
-                "DELETE"
-            );
-
-        } else if (action === "rename") {
-
-            const nameInput = document.getElementById("editName");
-
-            await sendEdit(
-                `/api/tests/${encoded}`,
-                "PATCH",
-                { name: nameInput ? nameInput.value.trim() : "" }
-            );
-
-        }
-
-        // Show the updated test
-        await loadEditView(code);
-
-    } catch (error) {
-
-        console.error("EDIT ERROR:", error);
-
-        alert(error.message);
-
-    } finally {
-
-        button.disabled = false;
-
-    }
-
-});
-
-// ==========================================
-// ADMIN: MENU BUTTONS + PAGE START-UP
-// ==========================================
-
-on(el.menuCreateButton, "click", function () {
-    showAdminScreen("create");
-});
-
-on(el.menuViewButton, "click", function () {
-    clearTestViews();
-    showAdminScreen("tests");
-    loadMyTests();
-});
-
-on(el.createBackButton, "click", function () {
-
-    if (el.createdTest) {
-        el.createdTest.innerHTML = "";
-    }
-
-    showAdminScreen("menu");
-});
-
-on(el.testsBackButton, "click", function () {
-    clearTestViews();
-    showAdminScreen("menu");
-});
-
-
-// Runs on page load. Shows the login screen unless the saved
-// token is still valid. (Only does something on the admin page.)
-async function initAdminPage() {
-
-    if (!el.adminLogin) {
-        return;
-    }
-
-    showLoginStep("email");
-
-    if (!admin.token) {
-        showAdminPanel(false);
-        return;
-    }
-
-    // Check the saved token with the server before trusting it
-    try {
-
-        const response = await adminFetch("/api/admin/tests");
-
-        if (!response.ok) {
-            throw new Error("Not logged in");
-        }
-
-        admin.email =
-            (await response.json()).email || admin.email;
-
-        showAdminPanel(true);
-
-    } catch (error) {
-
-        showAdminPanel(false);
-
-    }
-}
+    // Optional functions for debugging from the browser console.
+    window.AINTAdminTests = {
+        renderGuidelines,
+        addGuideline,
+        loadTests,
+        loadTestForEditing,
+        getGuidelinesString,
+    };
+})();
