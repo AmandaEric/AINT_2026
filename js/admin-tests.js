@@ -1,11 +1,11 @@
-
 /* ==========================================================
    AINT ADMIN TESTS
    - Add, display, and remove questions
    - Add, display, and remove grading guidelines
+   - Optional timer (enabled + minutes)
    - Create tests
    - View existing tests
-   - Edit test names, questions, and grading guidelines
+   - Edit test names, questions, grading guidelines, and timer
    ========================================================== */
 
    (() => {
@@ -57,8 +57,8 @@
     async function api(path, options = {}) {
         const token = getToken();
         if (!token) {
-    throw new Error("You are not logged in. Please log in again.");
-}
+            throw new Error("You are not logged in. Please log in again.");
+        }
 
         const headers = {
             ...(options.body ? { "Content-Type": "application/json" } : {}),
@@ -74,11 +74,11 @@
             if (typeof logoutAdmin === "function") {
                 logoutAdmin(false);
             }
-        
+
             if (typeof setLoginMessage === "function") {
                 setLoginMessage("Your session expired. Please log in again.");
             }
-        
+
             throw new Error("Your session expired. Please log in again.");
         }
 
@@ -326,6 +326,32 @@
     }
 
     /* ----------------------------------------------------------
+       TIMER (optional)
+       ---------------------------------------------------------- */
+
+    function resetTimerInputs() {
+        if ($("timerEnabled")) $("timerEnabled").checked = false;
+        if ($("timeLimit")) $("timeLimit").value = "";
+        if ($("timerSettings")) $("timerSettings").hidden = true;
+    }
+
+    // Reads the create-screen timer inputs.
+    // Returns { error } if invalid, otherwise the two fields for the server.
+    function getTimerSettings() {
+        const enabled = $("timerEnabled")?.checked || false;
+        const minutes = parseInt($("timeLimit")?.value, 10);
+
+        if (enabled && (!Number.isInteger(minutes) || minutes < 1 || minutes > 600)) {
+            return { error: "Enter a time limit between 1 and 600 minutes." };
+        }
+
+        return {
+            timer_enabled: enabled,
+            time_limit_minutes: enabled ? minutes : null,
+        };
+    }
+
+    /* ----------------------------------------------------------
        CREATE TEST
        ---------------------------------------------------------- */
 
@@ -347,6 +373,12 @@
             return;
         }
 
+        const timer = getTimerSettings();
+        if (timer.error) {
+            alert(timer.error);
+            return;
+        }
+
         if (button) button.disabled = true;
         showMessage("createdTest", "Creating test...");
 
@@ -357,6 +389,8 @@
                     name,
                     questions: questionPayload,
                     grading_guidelines: getGuidelinesString(),
+                    timer_enabled: timer.timer_enabled,
+                    time_limit_minutes: timer.time_limit_minutes,
                 }),
             });
 
@@ -379,6 +413,7 @@
 
             resetQuestions();
             resetGuidelines();
+            resetTimerInputs();
 
             if ($("testName")) $("testName").value = "";
         } catch (error) {
@@ -499,6 +534,27 @@
                 guidelinesInput.placeholder =
                     "Enter the grading guidelines for this test...";
 
+                // ----- Timer controls -----
+                const timerLabel = document.createElement("label");
+                const timerCheckbox = document.createElement("input");
+                timerCheckbox.type = "checkbox";
+                timerCheckbox.id = "editTimerEnabled";
+                timerCheckbox.checked = Boolean(test.timerEnabled);
+                timerLabel.append(timerCheckbox, " Enable timer");
+
+                const timerMinutes = document.createElement("input");
+                timerMinutes.type = "number";
+                timerMinutes.id = "editTimeLimit";
+                timerMinutes.min = "1";
+                timerMinutes.max = "600";
+                timerMinutes.placeholder = "Time limit (minutes)";
+                timerMinutes.value = test.timeLimitMinutes || "";
+                timerMinutes.hidden = !timerCheckbox.checked;
+
+                timerCheckbox.addEventListener("change", () => {
+                    timerMinutes.hidden = !timerCheckbox.checked;
+                });
+
                 const save = makeButton("Save Test Details", "", async () => {
                     await saveTestDetails();
                 });
@@ -518,6 +574,8 @@
                     nameInput,
                     guidelinesHeading,
                     guidelinesInput,
+                    timerLabel,
+                    timerMinutes,
                     save,
                     cancel
                 );
@@ -535,11 +593,23 @@
         const name = $("editTestName")?.value.trim() || "";
         const guidelines = $("editTestGuidelines")?.value.trim() || "";
 
+        const enabled = $("editTimerEnabled")?.checked || false;
+        const minutes = parseInt($("editTimeLimit")?.value, 10);
+
+        if (enabled && (!Number.isInteger(minutes) || minutes < 1 || minutes > 600)) {
+            alert("Enter a time limit between 1 and 600 minutes.");
+            return;
+        }
+
         try {
-            // Your current PATCH route only saves the test name.
             await api(`/api/tests/${encodeURIComponent(currentTestCode)}`, {
                 method: "PATCH",
-                body: JSON.stringify({ name, grading_guidelines: guidelines }),
+                body: JSON.stringify({
+                    name,
+                    grading_guidelines: guidelines,
+                    timer_enabled: enabled,
+                    time_limit_minutes: enabled ? minutes : null,
+                }),
             });
 
             currentTestName = name;
@@ -633,6 +703,7 @@
 
         resetQuestions();
         resetGuidelines();
+        resetTimerInputs();
 
         if ($("testName")) $("testName").value = "";
         showMessage("createdTest", "");
@@ -662,6 +733,13 @@
             if (event.key === "Enter") {
                 event.preventDefault();
                 addGuideline();
+            }
+        });
+
+        // Timer checkbox shows/hides the minutes input.
+        $("timerEnabled")?.addEventListener("change", (event) => {
+            if ($("timerSettings")) {
+                $("timerSettings").hidden = !event.target.checked;
             }
         });
 

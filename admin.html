@@ -80,6 +80,15 @@
             <input id="grading_guidelines" type="text" placeholder="Additional grading information or rules for AI?">
             <button id="guidelinesAdd" type="button">Add Instructions</button>
             <div id="guidelinesList"></div>
+            <h3>Timer</h3>
+            <label>
+                <input type="checkbox" id="timerEnabled"> Enable timer
+            </label>
+            <div id="timerSettings" hidden>
+                <input id="timeLimit" type="number" min="1" max="600" placeholder="Time limit (minutes)">
+            </div>
+                
+
 
             <button class="clearQuestion" type="button">Clear all questions</button>
             <button id="createTest" type="button">Create Test</button>

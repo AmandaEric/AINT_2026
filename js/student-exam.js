@@ -1,9 +1,9 @@
 /*
  * ============================================================
  * student-exam.js - THE STUDENT'S EXAM FLOW
- * Timer, Start/Stop button, submitting the exam for grading,
- * picking and asking questions, and the Evaluate button that gets
- * AI follow-up questions.
+ * Optional countdown timer, Start/Stop button, submitting the exam
+ * for grading, picking and asking questions, and the Evaluate
+ * button that gets AI follow-up questions.
  *
  * Requires avatar-speech.js to be loaded BEFORE this file
  * (provides speakAsAvatar and stopAvatarSpeech).
@@ -14,14 +14,25 @@
 // STUDENT: TIMER
 // ==========================================
 
+// state.seconds always counts UP (elapsed time, sent to the server).
+// If the test has a time limit, the display counts DOWN from it.
+// If the test has no time limit, the timer is hidden.
 function updateTimerDisplay() {
 
     if (!el.timer) {
         return;
     }
 
-    const minutes = Math.floor(state.seconds / 60);
-    const seconds = state.seconds % 60;
+    if (!exam.timerEnabled) {
+        el.timer.style.display = "none";
+        return;
+    }
+
+    el.timer.style.display = "";
+
+    const remaining = Math.max(0, exam.timeLimitSeconds - state.seconds);
+    const minutes = Math.floor(remaining / 60);
+    const seconds = remaining % 60;
 
     el.timer.textContent =
         `${minutes}:${String(seconds).padStart(2, "0")}`;
@@ -58,6 +69,11 @@ function startTimer() {
     state.timerInterval = setInterval(() => {
         state.seconds++;
         updateTimerDisplay();
+
+        // Time is up: auto-submit (only for timed tests)
+        if (exam.timerEnabled && state.seconds >= exam.timeLimitSeconds) {
+            finishExam(true);
+        }
     }, 1000);
 }
 
@@ -113,6 +129,40 @@ function saveUnsentAnswer() {
 // STUDENT: START / STOP / SUBMIT THE EXAM
 // ==========================================
 
+// Ends the exam and submits it. Used by the Stop button and by the
+// timer when time runs out. stopTimer() clears the interval, and the
+// exam.finishing flag keeps this from running twice.
+async function finishExam(timeUp = false) {
+
+    if (exam.submitted || exam.finishing) {
+        return;
+    }
+
+    exam.finishing = true;
+
+    // Save an answer that was typed or spoken
+    // but never sent with the Evaluate button
+    saveUnsentAnswer();
+
+    stopTimer();
+
+    // Stop the avatar mid-sentence and return it to neutral
+    if (typeof stopAvatarSpeech === "function") {
+        stopAvatarSpeech();
+    }
+
+    if (timeUp) {
+        alert("Time is up! Your exam will now be submitted.");
+    }
+
+    try {
+        await submitExam();
+    } finally {
+        exam.finishing = false;
+    }
+}
+
+
 // Start / Stop button
 on(
     el.startButton,
@@ -162,9 +212,17 @@ on(
 
                 exam.testCode = code;
                 exam.testQuestions = data.questions;
-                
+
                 // Save the teacher's grading guidelines from the server
                 exam.gradingGuidelines = data.grading_guidelines || "";
+
+                // Optional timer settings from the server
+                const limitSeconds = Number(data.timeLimitMinutes) * 60;
+                exam.timerEnabled =
+                    Boolean(data.timerEnabled) &&
+                    Number.isFinite(limitSeconds) &&
+                    limitSeconds > 0;
+                exam.timeLimitSeconds = exam.timerEnabled ? limitSeconds : 0;
 
                 /* Hide student information after the test loads */
                 if (el.studentName) {
@@ -198,6 +256,7 @@ on(
             exam.log = [];
             exam.current = null;
             exam.submitted = false;
+            exam.finishing = false;
             exam.lastRecordedAnswer = null;
 
             state.seconds = 0;
@@ -218,18 +277,7 @@ on(
             return;
         }
 
-        // Save an answer that was typed or spoken
-        // but never sent with the Evaluate button
-        saveUnsentAnswer();
-
-        stopTimer();
-
-        // Stop the avatar mid-sentence and return it to neutral
-        if (typeof stopAvatarSpeech === "function") {
-            stopAvatarSpeech();
-        }
-
-        await submitExam();
+        await finishExam();
     }
 );
 
