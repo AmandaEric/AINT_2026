@@ -3,6 +3,7 @@
     "version": "1.0.0",
     "type": "module",
     "scripts": {
+        "start": "node server.js",
         "start:server": "node server.js",
         "start:ai": "node aiguide.js",
         "dev": "node server.js"
@@ -17,7 +18,7 @@
         "openai": "^7.27.0"
     },
     "description": "AI testing students. Ask questions, Records answers, evaluates response, and follows up.  # AINT — setup",
-    "main": "aiGuide.js",
+    "main": "server.js",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/AmandaEric/AINT.git"
