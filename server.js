@@ -30,7 +30,7 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 
 const pool = mysql.createPool({
-    socketPath: process.env.DB_SOCKET || undefined,
+    socketPath: process.env.DB_HOST ? undefined : (process.env.DB_SOCKET || undefined),
     host: process.env.DB_HOST,
     port: Number(process.env.DB_PORT) || 3306,
     user: process.env.DB_USER,
