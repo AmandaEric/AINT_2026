@@ -11,7 +11,7 @@ import { fileURLToPath } from "url";
 // ES modules don't have __dirname, so build it
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-dotenv.config({ override: true });
+dotenv.config(); // don't override variables already set by the host
 console.log("DB CONFIG:", { host: process.env.DB_HOST, port: process.env.DB_PORT, user: process.env.DB_USER, name: process.env.DB_NAME });
 const app = express();
 
