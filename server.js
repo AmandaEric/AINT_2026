@@ -175,11 +175,11 @@ app.post("/api/admin/request-code", rateLimit(5, 60 * 1000), async (req, res, ne
         const codeHash = hashCode(code, salt);
 
         await sendEmail({
-            to: test.admin_email,
-            subject: `AINT result: ${studentName} – ${title} – ${result}`,
-            html: `<h3>${escapeHtml(studentName)} – ${escapeHtml(title)}</h3>
-                   <p>Result: <strong>${escapeHtml(result)}</strong>. Time: ${Math.round(durationSeconds / 60)} min.</p>
-                   ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}${rows}`,
+            to: email,
+            subject: "Your AINT Admin Login Code",
+            text: `Your permanent login code is: ${code}\n\nUse it with this email address every time you log in. Keep it somewhere safe.`,
+            html: `<p>Your permanent login code is: <strong style="font-size:1.4em;letter-spacing:2px">${code}</strong></p>
+                 <p>Use it with this email address every time you log in. Keep it somewhere safe.</p>`,
         });
         if (admin) {
             await pool.execute(
@@ -771,14 +771,13 @@ app.post("/api/tests/:code/submit", rateLimit(10, 60 * 1000), async (req, res, n
                 })
                 .join("");
 
-            await mailer.sendMail({
-                from: `"AINT System" <${EMAIL_FROM_USER}>`,
-                to: test.admin_email,
-                subject: `AINT result: ${studentName} – ${title} – ${result}`,
-                html: `<h3>${escapeHtml(studentName)} – ${escapeHtml(title)}</h3>
-               <p>Result: <strong>${escapeHtml(result)}</strong>. Time: ${Math.round(durationSeconds / 60)} min.</p>
-               ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}${rows}`,
-            });
+                await sendEmail({
+                    to: test.admin_email,
+                    subject: `AINT result: ${studentName} – ${title} – ${result}`,
+                    html: `<h3>${escapeHtml(studentName)} – ${escapeHtml(title)}</h3>
+                           <p>Result: <strong>${escapeHtml(result)}</strong>. Time: ${Math.round(durationSeconds / 60)} min.</p>
+                           ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}${rows}`,
+                });
 
             await pool.execute(`UPDATE Test_Scores SET email_sent = 1 WHERE Test_Scores_id = ?`, [score.insertId]);
         } catch (err) {
