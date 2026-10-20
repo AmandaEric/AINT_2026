@@ -124,7 +124,7 @@ const el = {
 // STATE: config and data shared between files
 // ==========================================
 
-const BACKEND_URL = "http://localhost:3000";
+const BACKEND_URL = window.location.hostname === "localhost" ? "http://localhost:3000" : "";
 
 const state = {
 
