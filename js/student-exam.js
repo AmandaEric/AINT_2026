@@ -523,19 +523,30 @@ async function handleEvaluate() {
                     "Content-Type": "application/json"
                 },
 
-
+                // The server looks up the teacher's grading guidelines
+                // itself from the test code.
                 body: JSON.stringify({
                     originalQuestion: originalQuestion,
                     studentResponse: answer,
                     category: exam.current ? exam.current.category : "",
-                    gradingGuidelines: exam.gradingGuidelines || ""
+                    testCode: exam.testCode
                 })
 
             }
         );
 
         if (!response.ok) {
-            throw new Error(`Server responded with ${response.status}`);
+            // Include the server's reason (each AI provider's error) when it sends one
+            let detail = "";
+            try {
+                const body = await response.json();
+                detail = body.details || body.error || "";
+            } catch {
+                // response had no JSON body
+            }
+            throw new Error(
+                `Server responded with ${response.status}${detail ? ": " + detail : ""}`
+            );
         }
 
         const data = await response.json();
@@ -586,8 +597,7 @@ async function handleEvaluate() {
 
         el.evaluationBox.innerHTML = `
             <h4>AI Connection Error</h4>
-            <p>Could not connect to the AI.</p>
-            <p>Make sure the backend server is running and your OpenAI key is set in .env.</p>
+            <p>The AI is temporarily unavailable. Please try again in a moment.</p>
         `;
 
     }
