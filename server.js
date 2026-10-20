@@ -5,6 +5,11 @@ import dotenv from "dotenv";
 import nodemailer from "nodemailer";
 import { generateWithFailover } from "./aiProviders.js";
 import crypto from "crypto";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// ES modules don't have __dirname, so build it
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 dotenv.config({ override: true });
 const app = express();
@@ -12,7 +17,7 @@ const app = express();
 // Behind a host's proxy (Railway, Render, ...) req.ip would otherwise be the
 // proxy's address, and every user would share one rate-limit bucket.
 app.set("trust proxy", 1);
-
+//
 // Set FRONTEND_ORIGIN (comma-separated if more than one) when you deploy.
 // If it is not set, any origin is allowed (fine for local development).
 app.use(
@@ -131,7 +136,20 @@ function rateLimit(max, windowMs) {
     };
 }
 
-app.get("/", (_, res) => res.json({ success: true, message: "AINT server is alive! 🚀" }));
+// ---------------------------------------------------------------------------
+// Frontend pages. Files are listed one by one on purpose, so server.js,
+// .env, schema.sql and other backend files are never public.
+// If main.html or admin.html load other files, add a route for each one here.
+// ---------------------------------------------------------------------------
+app.get("/health", (_, res) => res.json({ success: true, message: "AINT server is alive! 🚀" }));
+
+app.get("/", (_, res) => res.sendFile(path.join(__dirname, "main.html")));
+app.get("/main.html", (_, res) => res.sendFile(path.join(__dirname, "main.html")));
+app.get("/admin.html", (_, res) => res.sendFile(path.join(__dirname, "admin.html")));
+app.get("/style.css", (_, res) => res.sendFile(path.join(__dirname, "style.css")));
+app.get("/aintIcon.png", (_, res) => res.sendFile(path.join(__dirname, "aintIcon.png")));
+app.use("/js", express.static(path.join(__dirname, "js")));
+app.use("/aint_avatar_frames", express.static(path.join(__dirname, "aint_avatar_frames")));
 
 // 5 code emails per minute per IP, so the server can't be used to spam addresses
 app.post("/api/admin/request-code", rateLimit(5, 60 * 1000), async (req, res, next) => {
