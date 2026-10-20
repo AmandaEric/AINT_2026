@@ -12,7 +12,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 dotenv.config({ override: true });
-console.log("DB CONFIG:", { host: process.env.DB_HOST, port: process.env.DB_PORT, user: process.env.DB_USER, name: process.env.DB_NAME, socket: process.env.DB_SOCKET });
+console.log("DB CONFIG:", { host: process.env.DB_HOST, port: process.env.DB_PORT, user: process.env.DB_USER, name: process.env.DB_NAME });
 const app = express();
 
 // Behind a host's proxy (Railway, Render, ...) req.ip would otherwise be the
