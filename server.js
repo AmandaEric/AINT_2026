@@ -7,6 +7,7 @@ import { generateWithFailover } from "./aiProviders.js";
 import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
+import { Resend } from "resend";
 
 // ES modules don't have __dirname, so build it
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -44,18 +45,13 @@ const pool = mysql.createPool({
 const EMAIL_FROM_USER = process.env.EMAIL_USER || process.env.SMTP_USER;
 const EMAIL_PASSWORD = process.env.EMAIL_APP_PASSWORD || process.env.SMTP_PASS;
 
-const mailer = nodemailer.createTransport(
-    process.env.SMTP_HOST
-        ? {
-            host: process.env.SMTP_HOST,
-            port: Number(process.env.SMTP_PORT) || 587,
-            auth: { user: EMAIL_FROM_USER, pass: EMAIL_PASSWORD },
-        }
-        : {
-            service: "gmail",
-            auth: { user: EMAIL_FROM_USER, pass: EMAIL_PASSWORD },
-        }
-);
+const resend = new Resend(process.env.RESEND_API_KEY);
+const EMAIL_FROM = process.env.EMAIL_FROM || "AINT System <onboarding@resend.dev>";
+
+async function sendEmail({ to, subject, text, html }) {
+    const { error } = await resend.emails.send({ from: EMAIL_FROM, to, subject, text, html });
+    if (error) throw new Error(`Email failed: ${error.message}`);
+}
 
 const CODE_LENGTH = 8;
 const CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -178,15 +174,13 @@ app.post("/api/admin/request-code", rateLimit(5, 60 * 1000), async (req, res, ne
         const salt = crypto.randomBytes(16).toString("hex");
         const codeHash = hashCode(code, salt);
 
-        await mailer.sendMail({
-            from: `"AINT System" <${EMAIL_FROM_USER}>`,
-            to: email,
-            subject: "Your AINT Admin Login Code",
-            text: `Your permanent login code is: ${code}\n\nUse it with this email address every time you log in. Keep it somewhere safe.`,
-            html: `<p>Your permanent login code is: <strong style="font-size:1.4em;letter-spacing:2px">${code}</strong></p>
-             <p>Use it with this email address every time you log in. Keep it somewhere safe.</p>`,
+        await sendEmail({
+            to: test.admin_email,
+            subject: `AINT result: ${studentName} – ${title} – ${result}`,
+            html: `<h3>${escapeHtml(studentName)} – ${escapeHtml(title)}</h3>
+                   <p>Result: <strong>${escapeHtml(result)}</strong>. Time: ${Math.round(durationSeconds / 60)} min.</p>
+                   ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}${rows}`,
         });
-
         if (admin) {
             await pool.execute(
                 `UPDATE Admin
