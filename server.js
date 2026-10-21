@@ -790,6 +790,79 @@ app.post("/api/tests/:code/submit", rateLimit(10, 60 * 1000), async (req, res, n
     }
 });
 
+/* ----------------------------------------------------------
+   KOKORO TEXT-TO-SPEECH
+   ---------------------------------------------------------- */
+
+   app.post("/api/tts", rateLimit(30, 60 * 1000), async (req, res) => {
+    try {
+        const text = String(req.body.text || "").trim();
+
+        if (!text) {
+            return res.status(400).json({
+                success: false,
+                error: "Speech text is required."
+            });
+        }
+
+        if (text.length > 3000) {
+            return res.status(400).json({
+                success: false,
+                error: "Speech text is too long."
+            });
+        }
+
+        // Local Kokoro server by default.
+        // Change this with KOKORO_TTS_URL when deploying.
+        const kokoroUrl =
+            process.env.KOKORO_TTS_URL ||
+            "http://127.0.0.1:8880/v1/audio/speech";
+
+        const response = await fetch(kokoroUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg"
+            },
+            body: JSON.stringify({
+                model: "kokoro",
+                input: text,
+                voice: "af_bella",
+                response_format: "mp3",
+                speed: 1
+            }),
+            signal: AbortSignal.timeout(60000)
+        });
+
+        if (!response.ok) {
+            const details = await response.text();
+
+            console.error("Kokoro error:", response.status, details);
+
+            return res.status(502).json({
+                success: false,
+                error: "Kokoro could not generate speech."
+            });
+        }
+
+        const audioBuffer = Buffer.from(
+            await response.arrayBuffer()
+        );
+
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Cache-Control", "no-store");
+        res.send(audioBuffer);
+
+        } catch (err) {
+            console.error("TTS error:", err.message);
+
+            res.status(502).json({
+                success: false,
+            error: "Could not connect to the speech server."
+            });
+        }
+        });
+
 app.use("/api", (req, res) => {
     res.status(404).json({ success: false, error: `No such route: ${req.method} ${req.originalUrl}` });
 });

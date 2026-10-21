@@ -80,6 +80,8 @@ let avatarImage = null;
 let currentUtterance = null;
 let frameTimers = [];
 let speaking = false;
+let currentAudio = null;
+let currentAudioUrl = null;
 
 let msPerChar = START_MS_PER_CHAR;
 let boundarySeen = false;
@@ -291,14 +293,11 @@ if ("speechSynthesis" in window) {
 }
 
 /* ----------------------------------------------------------
-   SPEAK / STOP
+   SPEAK / STOP - KOKORO AUDIO
    ---------------------------------------------------------- */
 
-function speakAsAvatar(text) {
-    if (!("speechSynthesis" in window)) {
-        console.error("Speech synthesis is not supported by this browser.");
-        return;
-    }
+   async function speakAsAvatar(text) {
+    if (!text || !text.trim()) return;
 
     if (!avatarImage) {
         avatarImage = document.querySelector("#ai-avatar");
@@ -309,134 +308,106 @@ function speakAsAvatar(text) {
         return;
     }
 
-    if (!text || !text.trim()) return;
-
-    // Stop the previous speech and animation before starting another.
-    window.speechSynthesis.cancel();
-    clearFrameTimers();
-
-    speaking = false;
-    boundarySeen = false;
-    lastBoundary = null;
+    // Stop previous audio and animation.
+    stopAvatarSpeech();
 
     const cleanText = text.trim();
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = "en-US";
-    utterance.rate = SPEECH_RATE;
-    utterance.pitch = 1.0;
 
-    if (chosenVoice) {
-        utterance.voice = chosenVoice;
-    }
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/tts`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ text: cleanText })
+        });
 
-    // Mark this as the active utterance. Events from older, cancelled
-    // utterances arrive late and must be ignored, otherwise they reset
-    // the avatar in the middle of the new question.
-    currentUtterance = utterance;
-
-    utterance.onstart = () => {
-        if (currentUtterance !== utterance) return;
-
-        speaking = true;
-        speechStartTime = performance.now();
-
-        // Start moving right away from an estimate. The first word
-        // boundary event replaces this with real timing.
-        runEstimatedTimeline(cleanText);
-    };
-
-    utterance.onboundary = (event) => {
-        if (currentUtterance !== utterance) return;
-        if (event.name && event.name !== "word") return;
-        if (typeof event.charIndex !== "number") return;
-
-        const match = cleanText.slice(event.charIndex).match(WORD_START_RE);
-        if (!match) return;
-
-        const word = match[1];
-        const punct = match[2];
-        const now = performance.now();
-
-        boundarySeen = true;
-
-        // Learn the voice's speed from the time between boundaries,
-        // not counting the pause that punctuation added.
-        if (lastBoundary) {
-            const elapsed = now - lastBoundary.time - lastBoundary.pause;
-            const chars = event.charIndex - lastBoundary.index;
-
-            if (chars > 0 && elapsed > 0) {
-                const measured = Math.min(200, Math.max(30, elapsed / chars));
-                msPerChar = msPerChar * 0.6 + measured * 0.4;
-            }
+        if (!response.ok) {
+            const details = await response.text();
+            throw new Error(`TTS failed (${response.status}): ${details}`);
         }
 
-        lastBoundary = {
-            time: now,
-            index: event.charIndex,
-            pause: pauseFor(punct)
+        const audioBlob = await response.blob();
+
+        // A newer question may have started while audio was generating.
+        if (speechRequestId !== requestId) return;
+
+        currentAudioUrl = URL.createObjectURL(audioBlob);
+        currentAudio = new Audio(currentAudioUrl);
+
+        const audio = currentAudio;
+
+        audio.onplay = () => {
+            if (currentAudio !== audio) return;
+
+            speaking = true;
+            speechStartTime = performance.now();
+            boundarySeen = false;
+
+            // Approximate mouth movement while Kokoro speaks.
+            runEstimatedTimeline(cleanText);
         };
 
-        const wordMs = Math.max(MIN_FRAME_MS, word.length * msPerChar);
+        audio.onended = () => {
+            if (currentAudio !== audio) return;
 
-        clearFrameTimers();
-        playWord(word, wordMs, 0);
+            speaking = false;
+            clearFrameTimers();
+            setAvatarFrame("neutral");
+            releaseAudio();
+        };
 
-        if (punct) {
-            scheduleFrame("pause", wordMs);
-        }
-    };
+        audio.onerror = () => {
+            if (currentAudio !== audio) return;
 
-    utterance.onend = () => {
-        if (currentUtterance !== utterance) return;
+            console.error("Could not play Kokoro audio.");
+            clearFrameTimers();
+            setAvatarFrame("neutral");
+            releaseAudio();
+        };
 
-        // Voices without boundary events: learn the real speed from
-        // how long the whole utterance took, for the next one.
-        if (!boundarySeen && speechStartTime) {
-            const elapsed =
-                performance.now() - speechStartTime - punctPauseTotal(cleanText);
+        await audio.play();
 
-            if (elapsed > 500 && cleanText.length > 0) {
-                const measured = Math.min(200, Math.max(30, elapsed / cleanText.length));
-                msPerChar = msPerChar * 0.5 + measured * 0.5;
-            }
-        }
-
-        speaking = false;
+    } catch (error) {
+        console.error("Avatar speech failed:", error);
         clearFrameTimers();
         setAvatarFrame("neutral");
-    };
-
-    utterance.onerror = (event) => {
-        if (currentUtterance !== utterance) return;
-
-        speaking = false;
-        clearFrameTimers();
-        setAvatarFrame("neutral");
-
-        if (event.error !== "canceled" &&
-            event.error !== "interrupted") {
-            console.error("Avatar speech error:", event.error);
-        }
-    };
-
-    setAvatarFrame("neutral");
-    window.speechSynthesis.speak(utterance);
+        releaseAudio();
+    }
 }
 
-// Stop speech when requested by your app.
-function stopAvatarSpeech() {
-    // Detach the active utterance so its late events are ignored.
-    currentUtterance = null;
-    speaking = false;
-    clearFrameTimers();
+let speechRequestId = 0;
+let requestId = 0;
 
-    if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
+function releaseAudio() {
+    if (currentAudio) {
+        currentAudio.onplay = null;
+        currentAudio.onended = null;
+        currentAudio.onerror = null;
+        currentAudio.pause();
+        currentAudio = null;
     }
 
+    if (currentAudioUrl) {
+        URL.revokeObjectURL(currentAudioUrl);
+        currentAudioUrl = null;
+    }
+
+    speaking = false;
+}
+
+function stopAvatarSpeech() {
+    // Invalidate any TTS request that hasn't finished yet.
+    requestId = ++speechRequestId;
+
+    clearFrameTimers();
+    releaseAudio();
     setAvatarFrame("neutral");
 }
+
+
+
+
 
 document.addEventListener("DOMContentLoaded", () => {
     avatarImage = document.querySelector("#ai-avatar");
