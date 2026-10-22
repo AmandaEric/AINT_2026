@@ -30,12 +30,21 @@
             <div class="avatar-container">
                 <img id="ai-avatar" src="aint_avatar_frames/01_neutral.png" alt="AINT AI speaking avatar">
             </div>
+
             <div class="test-controls">
                 <div class="timer">0:00</div>
                 <button class="start">Start</button>
             </div>
         </div>
         <div class="question-output">
+            <button id="replayButton" class="replay-btn" type="button"
+                    title="Replay question audio" aria-label="Replay question audio">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 3-6.7"/>
+                <polyline points="3 4 3 10 9 10"/>
+                </svg>
+            </button>
             <p class="question-text"></p>
             <div class="evaluation">
                 <p>AI evaluation will appear here.</p>
@@ -44,11 +53,10 @@
         <div class="response-container">
             <h3>Student Response</h3>
 
-            <button class="listen" disabled>
-                Start Listening
-            </button>
-            <textarea class="response" placeholder="Your spoken response will appear here..." disabled> </textarea>
-
+            <div class="response-row">
+                <button class="listen" disabled>Start Listening</button>
+                <textarea class="response" placeholder="Your spoken response will appear here..." disabled></textarea>
+            </div>
             <button class="evaluate" disabled>
                 Evaluate Response
             </button>

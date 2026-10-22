@@ -9,7 +9,55 @@
  * (provides speakAsAvatar and stopAvatarSpeech).
  * ============================================================
  */
+// ==========================================
+// STUDENT: REPLAY QUESTION AUDIO
+// ==========================================
 
+// The replay button (id="replayButton" in main.html) lets the student
+// hear the current question again. It replays whatever was last spoken
+// by safeSpeak(): a normal question or an AI follow-up question.
+//
+// How it works:
+//   - safeSpeak() saves its text in lastSpokenText and enables the button
+//   - clicking the button speaks lastSpokenText again
+//   - stopTimer() disables the button when the exam ends or is stopped
+
+const replayButton = document.getElementById("replayButton");
+
+// The text of the question that was spoken most recently
+let lastSpokenText = "";
+
+// Turn the replay button on or off
+function setReplayEnabled(enabled) {
+    if (replayButton) {
+        replayButton.disabled = !enabled;
+    }
+}
+
+// Speak the current question again
+function replayQuestion() {
+
+    // Nothing to replay yet, or the exam is not running
+    if (!lastSpokenText || !state.testRunning) {
+        return;
+    }
+
+    // Cut off any speech that is still playing, so the two don't overlap
+    if (typeof stopAvatarSpeech === "function") {
+        stopAvatarSpeech();
+    }
+
+    // Short delay: browsers can drop speech that starts the instant
+    // the previous speech is cancelled
+    setTimeout(function () {
+        safeSpeak(lastSpokenText);
+    }, 100);
+}
+
+// Disabled until the first question has been spoken
+setReplayEnabled(false);
+
+on(replayButton, "click", replayQuestion);
 // ==========================================
 // STUDENT: TIMER
 // ==========================================
@@ -89,6 +137,10 @@ function stopTimer() {
     clearInterval(state.timerInterval);
 
     setQuestionButtonsEnabled(false);
+
+    // Nothing to replay once the exam is stopped
+    setReplayEnabled(false);
+    lastSpokenText = "";
 
     if (state.isListening && state.recognition) {
         state.recognition.stop();
@@ -366,7 +418,12 @@ window.submitExam = submitExam;
 
 // Speaks text with the animated avatar. If the avatar script failed to
 // load (or throws), the exam keeps working without speech.
+// Also remembers the text so the replay button can speak it again.
 function safeSpeak(text) {
+
+    lastSpokenText = text;
+    setReplayEnabled(true);
+
     try {
         if (typeof speakAsAvatar === "function") {
             speakAsAvatar(text);
