@@ -26,6 +26,8 @@ const replayButton = document.getElementById("replayButton");
 
 // The text of the question that was spoken most recently
 let lastSpokenText = "";
+// True while the student still needs to answer an AI follow-up.
+let followUpNeedsAnswer = false;
 
 // Turn the replay button on or off
 function setReplayEnabled(enabled) {
@@ -89,7 +91,8 @@ function updateTimerDisplay() {
 
 function setQuestionButtonsEnabled(enabled) {
     if (el.nextButton) {
-        el.nextButton.disabled = !enabled;
+        el.nextButton.disabled =
+            !enabled || followUpNeedsAnswer;
     }
 }
 
@@ -310,6 +313,7 @@ on(
             exam.submitted = false;
             exam.finishing = false;
             exam.lastRecordedAnswer = null;
+            followUpNeedsAnswer = false;
 
             state.seconds = 0;
             state.selectedQuestions = [];
@@ -451,6 +455,10 @@ function addAllQuestions() {
 
 // Ask next question
 function askNextQuestion() {
+    // Do not advance while an AI follow-up needs an answer.
+    if (followUpNeedsAnswer) {
+        return;
+    }
 
     if (!el.questionText) {
         return;
@@ -632,20 +640,32 @@ async function handleEvaluate() {
         }
 
         if (hasFollowUp) {
+            // Lock Next until the student answers this follow-up.
+            followUpNeedsAnswer = true;
+            setQuestionButtonsEnabled(state.testRunning);
 
             addEvaluationLine("p", data.followUpQuestion, "Follow-up:");
 
-            // Show follow-up as the current question and clear the answer box
+            // Display the follow-up as the current question.
             el.questionText.textContent = data.followUpQuestion;
             el.responseBox.value = "";
 
-            // Speak follow-up with the animated avatar
+            // Let the student answer the follow-up.
+            el.responseBox.disabled = false;
+
+            if (el.listenButton) {
+                el.listenButton.disabled = false;
+            }
+
+            // Speak the follow-up with the animated avatar.
             safeSpeak(data.followUpQuestion);
 
         } else {
+            // No more follow-up is needed, so Next can be used again.
+            followUpNeedsAnswer = false;
+            setQuestionButtonsEnabled(state.testRunning);
 
             addEvaluationLine("p", "No follow-up question is needed.");
-
         }
 
     } catch (error) {
