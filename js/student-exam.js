@@ -215,6 +215,7 @@ async function finishExam(timeUp = false) {
     } finally {
         exam.finishing = false;
     }
+    stopProctoring();
 }
 
 
@@ -321,6 +322,7 @@ on(
             updateTimerDisplay();
 
             startTimer();
+            startProctoring();
             addAllQuestions();
             askNextQuestion();
 
