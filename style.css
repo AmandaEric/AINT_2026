@@ -316,6 +316,12 @@ button:active {
     flex-direction: column;
     align-items: center;
 }
+#testsScreen{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin:10px auto;
+}
 #createScreen{
     margin-left: 20px;
 }

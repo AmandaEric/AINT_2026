@@ -143,3 +143,21 @@ CREATE TABLE `tests` (
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2026-10-19 23:07:16
+
+-- ==========================================
+-- PROCTORING EVENTS
+-- Stores exam monitoring events for AINT
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS Proctoring_Events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    exam_code VARCHAR(20) NOT NULL,
+    event_type VARCHAR(50) NOT NULL,
+    details TEXT,
+    event_timestamp DATETIME(3) NOT NULL,
+    received_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX idx_exam_code (exam_code),
+    INDEX idx_event_timestamp (event_timestamp)
+);
+
