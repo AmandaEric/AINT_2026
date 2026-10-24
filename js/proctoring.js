@@ -13,6 +13,38 @@
  */
 
 window.aintProctoringEvents = [];
+async function sendProctoringEvent(event) {
+    if (!exam.testCode) {
+        console.warn("Cannot save proctoring event: no test code.");
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `${BACKEND_URL}/api/tests/${encodeURIComponent(exam.testCode)}/proctoring-events`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    type: event.type,
+                    details: event.details,
+                    timestamp: event.timestamp
+                })
+            }
+        );
+
+        if (!response.ok) {
+            console.error(
+                "Could not save proctoring event:",
+                response.status
+            );
+        }
+    } catch (error) {
+        console.error("Proctoring event connection error:", error);
+    }
+}
 
 let proctoringActive = false;
 
@@ -28,6 +60,7 @@ function recordProctoringEvent(type, details = "") {
     window.aintProctoringEvents.push(event);
 
     console.warn("AINT Proctoring Event:", event);
+    sendProctoringEvent(event);
 }
 
 function startProctoring() {
