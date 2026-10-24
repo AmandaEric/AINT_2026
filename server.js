@@ -862,7 +862,82 @@ app.post("/api/tests/:code/submit", rateLimit(10, 60 * 1000), async (req, res, n
             });
         }
         });
+// ==========================================
+// PROCTORING EVENTS
+// Save exam monitoring events to MySQL
+// ==========================================
 
+app.post(
+    "/api/tests/:code/proctoring-events",
+    rateLimit(120, 60 * 1000),
+    async (req, res, next) => {
+        try {
+            const examCode = String(req.params.code || "")
+                .trim()
+                .toUpperCase();
+
+            const eventType = String(req.body.type || "");
+            const details = String(req.body.details || "").slice(0, 1000);
+            const timestamp = new Date(req.body.timestamp);
+
+            const allowedTypes = [
+                "TAB_HIDDEN",
+                "TAB_VISIBLE",
+                "FULLSCREEN_EXIT"
+            ];
+
+            if (!allowedTypes.includes(eventType)) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Invalid proctoring event type."
+                });
+            }
+
+            if (
+                !req.body.timestamp ||
+                Number.isNaN(timestamp.getTime())
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    error: "A valid event timestamp is required."
+                });
+            }
+
+            // Confirm that this exam code exists.
+            const [tests] = await pool.execute(
+                "SELECT id FROM tests WHERE test_code = ?",
+                [examCode]
+            );
+
+            if (tests.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: "Exam not found."
+                });
+            }
+
+            // Store the event time in UTC in MySQL DATETIME format.
+            const eventTimestamp = timestamp
+                .toISOString()
+                .slice(0, 23)
+                .replace("T", " ");
+
+            await pool.execute(
+                `INSERT INTO Proctoring_Events
+                    (exam_code, event_type, details, event_timestamp)
+                 VALUES (?, ?, ?, ?)`,
+                [examCode, eventType, details, eventTimestamp]
+            );
+
+            res.status(201).json({
+                success: true,
+                message: "Proctoring event saved."
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
 app.use("/api", (req, res) => {
     res.status(404).json({ success: false, error: `No such route: ${req.method} ${req.originalUrl}` });
 });
