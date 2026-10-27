@@ -179,6 +179,17 @@ function saveUnsentAnswer() {
     recordAnswer(el.questionText.textContent, answer);
     exam.lastRecordedAnswer = answer;
 }
+const responseBox = document.querySelector('.response');
+const wordCountEl = document.getElementById('wordCount');
+
+function updateWordCount() {
+    const text = responseBox.value.trim();
+    const count = text === '' ? 0 : text.split(/\s+/).length;
+    wordCountEl.textContent = `Words: ${count}`;
+}
+
+responseBox.addEventListener('input', updateWordCount);
+updateWordCount();
 
 // ==========================================
 // STUDENT: START / STOP / SUBMIT THE EXAM

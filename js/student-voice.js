@@ -1,3 +1,25 @@
+// ==========================================
+// STUDENT: WORD COUNT
+// ==========================================
+
+const wordCountEl = document.getElementById("wordCount");
+
+function updateWordCount() {
+    if (!wordCountEl || !el.responseBox) return;
+
+    const text = el.responseBox.value.trim();
+    const count = text === "" ? 0 : text.split(/\s+/).length;
+
+    wordCountEl.textContent = `Words: ${count}`;
+}
+
+// Updates when the text changes by typing, or when code dispatches an "input" event
+if (el.responseBox) {
+    el.responseBox.addEventListener("input", updateWordCount);
+}
+
+updateWordCount();
+
 
 // ==========================================
 // STUDENT: SPEECH TO TEXT (the student answers by voice)
@@ -61,6 +83,7 @@ if (SpeechRecognition) {
 
         if (finalTranscript && el.responseBox) {
             el.responseBox.value += finalTranscript;
+            updateWordCount();
         }
     };
 }
