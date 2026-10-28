@@ -1,6 +1,6 @@
 /* ==========================================================
    AINT ADMIN TESTS
-   - Add, display, and remove questions
+   - Add, display, and remove questions (with points and an optional image)
    - Add, display, and remove grading guidelines
    - Optional timer (enabled + minutes)
    - Create tests
@@ -8,27 +8,37 @@
    - Edit test names, questions, grading guidelines, and timer
    ========================================================== */
 
-   (() => {
+(() => {
     "use strict";
     const API = BACKEND_URL;   // defined in core.js
+
+    const DEFAULT_POINTS = 10;
+    const MAX_POINTS = 100;
+
     const categories = {
         objective: {
             input: "objectiveInput",
             button: "objectiveAdd",
             list: "objectiveList",
             label: "Objective",
+            points: "objectivePoints",
+            image: "objectiveImage",
         },
         semi: {
             input: "semiInput",
             button: "semiAdd",
             list: "semiList",
             label: "Semi-Objective",
+            points: "semiPoints",
+            image: "semiImage",
         },
         qualitative: {
             input: "qualitativeInput",
             button: "qualitativeAdd",
             list: "qualitativeList",
             label: "Qualitative",
+            points: "qualitativePoints",
+            image: "qualitativeImage",
         },
     };
 
@@ -114,6 +124,44 @@
     }
 
     /* ----------------------------------------------------------
+       IMAGES
+       Resizes the chosen image in the browser and returns it as a
+       small JPEG data URL, so it can be sent as JSON.
+       ---------------------------------------------------------- */
+
+    function fileToDataUrl(file, maxSize = 800) {
+        return new Promise((resolve, reject) => {
+            if (!file.type.startsWith("image/")) {
+                reject(new Error("Please choose an image file."));
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error("Could not read the image."));
+            reader.onload = () => {
+                const img = new Image();
+                img.onerror = () => reject(new Error("That file is not a valid image."));
+                img.onload = () => {
+                    const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+                    const canvas = document.createElement("canvas");
+                    canvas.width = Math.round(img.width * scale);
+                    canvas.height = Math.round(img.height * scale);
+
+                    const ctx = canvas.getContext("2d");
+                    // White background so transparent PNGs don't turn black in a JPEG
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    resolve(canvas.toDataURL("image/jpeg", 0.8));
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    /* ----------------------------------------------------------
        QUESTIONS
        ---------------------------------------------------------- */
 
@@ -129,7 +177,20 @@
             item.className = "admin-list-item";
 
             const text = document.createElement("span");
-            text.textContent = `${index + 1}. ${question.text}`;
+            text.textContent =
+                `${index + 1}. ${question.text} (${question.points || DEFAULT_POINTS} pts)`;
+
+            item.appendChild(text);
+
+            if (question.image) {
+                const thumb = document.createElement("img");
+                thumb.src = question.image;
+                thumb.alt = "Question image";
+                thumb.style.maxHeight = "48px";
+                thumb.style.marginLeft = "8px";
+                thumb.style.verticalAlign = "middle";
+                item.appendChild(thumb);
+            }
 
             const remove = makeButton("Remove", "remove-question", () => {
                 if (question.id && currentTestCode && editingTest) {
@@ -141,12 +202,20 @@
                 renderQuestions(category);
             });
 
-            item.append(text, remove);
+            item.appendChild(remove);
             list.appendChild(item);
         });
     }
 
-    function addQuestion(category) {
+    // Clears the points and image inputs for one category
+    function resetQuestionExtras(category) {
+        const config = categories[category];
+
+        if ($(config.points)) $(config.points).value = DEFAULT_POINTS;
+        if ($(config.image)) $(config.image).value = "";
+    }
+
+    async function addQuestion(category) {
         const config = categories[category];
         const input = $(config.input);
 
@@ -164,29 +233,61 @@
             return;
         }
 
-        if (editingTest && currentTestCode) {
-            addSavedQuestion(category, text);
+        // Points
+        const points = parseInt($(config.points)?.value, 10) || DEFAULT_POINTS;
+
+        if (points < 1 || points > MAX_POINTS) {
+            alert(`Points must be between 1 and ${MAX_POINTS}.`);
             return;
         }
 
-        questions[category].push({ text });
+        // Optional image
+        const file = $(config.image)?.files[0];
+        let image = null;
+
+        if (file) {
+            try {
+                image = await fileToDataUrl(file);
+            } catch (error) {
+                alert(error.message);
+                return;
+            }
+        }
+
+        const question = { text, points, image };
+
+        // Editing a saved test: send straight to the server
+        if (editingTest && currentTestCode) {
+            await addSavedQuestion(category, question);
+            return;
+        }
+
+        // New test: keep it in memory until "Create Test"
+        questions[category].push(question);
         input.value = "";
+        resetQuestionExtras(category);
         renderQuestions(category);
         input.focus();
     }
 
-    async function addSavedQuestion(category, text) {
+    async function addSavedQuestion(category, question) {
         try {
             await api(
                 `/api/tests/${encodeURIComponent(currentTestCode)}/questions`,
                 {
                     method: "POST",
-                    body: JSON.stringify({ category, text }),
+                    body: JSON.stringify({
+                        category,
+                        text: question.text,
+                        points: question.points,
+                        image: question.image,
+                    }),
                 }
             );
 
             const input = $(categories[category].input);
             if (input) input.value = "";
+            resetQuestionExtras(category);
 
             await loadTestForEditing(currentTestCode);
         } catch (error) {
@@ -223,6 +324,7 @@
         for (const category of Object.keys(categories)) {
             const input = $(categories[category].input);
             if (input) input.value = "";
+            resetQuestionExtras(category);
             renderQuestions(category);
         }
     }
@@ -359,10 +461,17 @@
         const button = $("createTest");
         const name = $("testName")?.value.trim() || "";
 
+        // Each question is now an object: { text, points, image }
+        const toPayload = (q) => ({
+            text: q.text,
+            points: q.points || DEFAULT_POINTS,
+            image: q.image || null,
+        });
+
         const questionPayload = {
-            objective: questions.objective.map((q) => q.text),
-            semi: questions.semi.map((q) => q.text),
-            qualitative: questions.qualitative.map((q) => q.text),
+            objective: questions.objective.map(toPayload),
+            semi: questions.semi.map(toPayload),
+            qualitative: questions.qualitative.map(toPayload),
         };
 
         const totalQuestions = Object.values(questionPayload)
@@ -481,19 +590,17 @@
             currentTestGuidelines = test.gradingGuidelines || "";
             editingTest = true;
 
+            const mapQuestion = (q) => ({
+                id: q.id,
+                text: q.text,
+                points: q.points || DEFAULT_POINTS,
+                image: q.image || null,
+            });
+
             questions = {
-                objective: (test.questions.objective || []).map((q) => ({
-                    id: q.id,
-                    text: q.text,
-                })),
-                semi: (test.questions.semi || []).map((q) => ({
-                    id: q.id,
-                    text: q.text,
-                })),
-                qualitative: (test.questions.qualitative || []).map((q) => ({
-                    id: q.id,
-                    text: q.text,
-                })),
+                objective: (test.questions.objective || []).map(mapQuestion),
+                semi: (test.questions.semi || []).map(mapQuestion),
+                qualitative: (test.questions.qualitative || []).map(mapQuestion),
             };
 
             for (const category of Object.keys(categories)) {
@@ -667,7 +774,9 @@
                     const question = document.createElement("p");
                     question.textContent =
                         `${index + 1}. ${q.question || ""}` +
-                        (q.score !== undefined ? ` — ${q.score}/10` : "") +
+                        (q.score !== undefined
+                            ? ` — ${q.score}/${q.maxPoints || DEFAULT_POINTS}`
+                            : "") +
                         (q.feedback ? ` | ${q.feedback}` : "");
 
                     card.appendChild(question);

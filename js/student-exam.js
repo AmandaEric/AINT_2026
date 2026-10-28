@@ -179,17 +179,17 @@ function saveUnsentAnswer() {
     recordAnswer(el.questionText.textContent, answer);
     exam.lastRecordedAnswer = answer;
 }
-const responseBox = document.querySelector('.response');
-const wordCountEl = document.getElementById('wordCount');
+// const responseBox = document.querySelector('.response');
+// const wordCountEl = document.getElementById('wordCount');
 
-function updateWordCount() {
-    const text = responseBox.value.trim();
-    const count = text === '' ? 0 : text.split(/\s+/).length;
-    wordCountEl.textContent = `Words: ${count}`;
-}
+// function updateWordCount() {
+//     const text = responseBox.value.trim();
+//     const count = text === '' ? 0 : text.split(/\s+/).length;
+//     wordCountEl.textContent = `Words: ${count}`;
+// }
 
-responseBox.addEventListener('input', updateWordCount);
-updateWordCount();
+// responseBox.addEventListener('input', updateWordCount);
+// updateWordCount();
 
 // ==========================================
 // STUDENT: START / STOP / SUBMIT THE EXAM
@@ -459,10 +459,15 @@ function addAllQuestions() {
     const all = exam.testQuestions || {};
 
     Object.keys(all).forEach(category => {
-        (all[category] || []).forEach(text => {
-            state.selectedQuestions.push({ category, text });
+       (all[category] || []).forEach(q => {
+            const item = typeof q === "string" ? { text: q } : q;
+            state.selectedQuestions.push({
+                category,
+                text: item.text,
+                points: item.points || 10,
+                image: item.image || ""
+            });
         });
-    });
 }
 
 
@@ -538,7 +543,21 @@ function askNextQuestion() {
 
 // Next question button
 on(el.nextButton, "click", askNextQuestion);
+const questionImage = document.getElementById("question-image");
 
+function showQuestionImage(src) {
+    if (!questionImage || !el.avatarContainer) return;
+
+    if (src) {
+        questionImage.src = src;
+        questionImage.hidden = false;
+        el.avatarContainer.classList.add("has-question-image");
+    } else {
+        questionImage.removeAttribute("src");
+        questionImage.hidden = true;
+        el.avatarContainer.classList.remove("has-question-image");
+    }
+}
 
 // ==========================================
 // STUDENT: AI EVALUATION (follow-up questions)
