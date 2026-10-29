@@ -716,4 +716,4 @@ async function handleEvaluate() {
 
 
 // Evaluate button
-on(el.evaluateButton, "click", handleEvaluate);
+on(el.evaluateButton, "click", handleEvaluate);}
