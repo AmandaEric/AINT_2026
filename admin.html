@@ -49,6 +49,7 @@
             <h2>What would you like to do?</h2>
             <button id="menuCreateButton" type="button">Create a new test</button>
             <button id="menuViewButton" type="button">View or edit an existing test</button>
+            <button id="menuSettingsButton" type="button">AI and Database settings</button>
         </div>
 
         <!-- SCREEN 3a: CREATE -->
@@ -62,7 +63,7 @@
             <textarea id="objectiveInput" class="admin-question-text"
                 rows="3" maxlength="1000"
                 placeholder="Add an objective question..."></textarea>
-                <p2>Give a score that AI should use to evaluate responses:</p2>
+                <p2>Score for AI to evaluate responses:</p2>
                 <input type="number" id="objectivePoints" min="1" max="100" value="10" placeholder="Points">
                 <input type="file" id="objectiveImage" accept="image/*">
             <button id="objectiveAdd" type="button">Add Question</button>
@@ -73,7 +74,7 @@
             <textarea id="semiInput" class="admin-question-text"
                 rows="3" maxlength="1000"
                 placeholder="Add a semi-objective question..."></textarea>
-                <p2>Give a score that AI should use to evaluate responses:</p2>
+                <p2>Score for AI to evaluate responses:</p2>
                 <input type="number" id="semiPoints" min="1" max="100" value="10" placeholder="Points">
                 <input type="file" id="semiImage" accept="image/*">
             <button id="semiAdd" type="button">Add Question</button>
@@ -84,7 +85,7 @@
             <textarea id="qualitativeInput" class="admin-question-text"
                 rows="3" maxlength="1000"
                 placeholder="Add a qualitative question..."></textarea>
-                <p2>Give a score that AI should use to evaluate responses:</p2>
+                <p2>Score for AI to evaluate responses:</p2>
                 <input type="number" id="qualitativePoints" min="1" max="100" value="10" placeholder="Points">
                 <input type="file" id="qualitativeImage" accept="image/*">
             <button id="qualitativeAdd" type="button">Add Question</button>
@@ -120,6 +121,7 @@
         <p>Logged in as <strong id="adminEmailLabel"></strong>
         <button id="logoutButton" type="button">Log out</button></p>
     </div>
+
 
     <footer>
         <p>&copy; 2026 Artificial Intelligent Testing Center. All rights reserved.</p>

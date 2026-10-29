@@ -391,7 +391,9 @@ button:active {
     cursor: pointer;
 }
 p2{
-    font-size: 8px;
+    display: flex;
+    width: 30px;
+    font-size: 10px;
     color: #555;
     margin: 2px 0;
 }
