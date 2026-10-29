@@ -468,7 +468,7 @@ function addAllQuestions() {
                 image: item.image || ""
             });
         });
-}
+})
 
 
 // Ask next question
