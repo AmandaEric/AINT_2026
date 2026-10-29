@@ -459,8 +459,9 @@ function addAllQuestions() {
     const all = exam.testQuestions || {};
 
     Object.keys(all).forEach(category => {
-       (all[category] || []).forEach(q => {
+        (all[category] || []).forEach(q => {
             const item = typeof q === "string" ? { text: q } : q;
+
             state.selectedQuestions.push({
                 category,
                 text: item.text,
@@ -511,6 +512,7 @@ function askNextQuestion() {
     exam.current = {
         category: picked.category,
         question: picked.text,
+        points: picked.points,
         exchanges: []
     };
 
