@@ -455,23 +455,39 @@ function safeSpeak(text) {
 // Load every question from every category into one random pool.
 // Each question keeps its own category for the exam log.
 function addAllQuestions() {
-
     const all = exam.testQuestions || {};
 
     Object.keys(all).forEach(category => {
         (all[category] || []).forEach(q => {
-            const item = typeof q === "string" ? { text: q } : q;
+
+            // If the question is already a string, use it.
+            let questionText;
+
+            if (typeof q === "string") {
+                questionText = q;
+            } else {
+                // Try common property names.
+                questionText =
+                    q.text ??
+                    q.questionText ??
+                    q.question;
+            }
+
+            // Make sure we have actual text.
+            if (typeof questionText !== "string") {
+                console.error("Invalid question format:", q);
+                return;
+            }
 
             state.selectedQuestions.push({
                 category,
-                text: item.text,
-                points: item.points || 10,
-                image: item.image || ""
+                text: questionText,
+                points: q.points || 10,
+                image: q.image || ""
             });
         });
     });
 }
-
 
 // Ask next question
 function askNextQuestion() {
