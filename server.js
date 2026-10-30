@@ -316,14 +316,31 @@ app.post("/api/tests", requireAdmin, async (req, res, next) => {
         ).trim().slice(0, MAX_GUIDELINES_LENGTH);
 
         const rows = [];
+
         for (const category of CATEGORIES) {
             for (const q of Array.isArray(input[category]) ? input[category] : []) {
-                const text = String(q).trim();
+
+                // Support both old string questions and new question objects.
+                const question = typeof q === "string"
+                    ? { text: q, points: 10, image: null }
+                    : q;
+
+                const text = String(question.text || "").trim();
+                const points = Number(question.points) || 10;
+                const image = question.image || null;
+
                 if (!text) continue;
+
                 if (text.length > MAX_QUESTION_LENGTH) {
-                    return badRequest(res, `Questions can be at most ${MAX_QUESTION_LENGTH} characters.`);
+                    return badRequest(res, "Question is too long.");
                 }
-                rows.push([category, text]);
+
+                rows.push({
+                    category,
+                    text,
+                    points,
+                    image
+                });
             }
         }
         if (rows.length === 0) return badRequest(res, "Add at least one question.");
@@ -355,8 +372,8 @@ app.post("/api/tests", requireAdmin, async (req, res, next) => {
             if (!testId) throw new Error("Could not make a unique test code. Try again.");
 
             await conn.query(
-                `INSERT INTO Questions (Test_id, category, question_text) VALUES ?`,
-                [rows.map(([category, text]) => [testId, category, text])]
+                `INSERT INTO Questions (Test_id, category, question_text, points, image) VALUES ?`,
+                [rows.map((q) => [testId, q.category, q.text, q.points, q.image])]
             );
 
             await conn.commit();
@@ -410,7 +427,7 @@ app.get("/api/tests/:code/edit", requireAdmin, async (req, res, next) => {
         if (!test) return res.status(404).json({ success: false, error: "Test not found." });
 
         const [questions] = await pool.execute(
-            `SELECT Question_id, category, question_text
+            `SELECT Question_id, category, question_text, points, image
                FROM Questions
               WHERE Test_id = ?
               ORDER BY Question_id`,
@@ -423,9 +440,15 @@ app.get("/api/tests/:code/edit", requireAdmin, async (req, res, next) => {
         );
 
         const grouped = { objective: [], semi: [], qualitative: [] };
+
         for (const q of questions) {
             if (grouped[q.category]) {
-                grouped[q.category].push({ id: q.Question_id, text: q.question_text });
+                grouped[q.category].push({
+                    id: q.Question_id,
+                    text: q.question_text,
+                    points: q.points,
+                    image: q.image || ""
+                });
             }
         }
 
@@ -442,28 +465,55 @@ app.get("/api/tests/:code/edit", requireAdmin, async (req, res, next) => {
     }
 });
 
+
 app.post("/api/tests/:code/questions", requireAdmin, async (req, res, next) => {
     try {
         const test = await getOwnedTest(req.params.code, req.admin.Admin_id);
-        if (!test) return res.status(404).json({ success: false, error: "Test not found." });
+        if (!test) {
+            return res.status(404).json({
+                success: false,
+                error: "Test not found."
+            });
+        }
 
         const category = req.body.category;
         const text = String(req.body.text || "").trim();
-        if (!CATEGORIES.includes(category)) return badRequest(res, "Unknown category.");
-        if (!text) return badRequest(res, "Please enter a question.");
+        const points = Number(req.body.points ?? 10);
+        const image = req.body.image || null;
+
+        if (!CATEGORIES.includes(category)) {
+            return badRequest(res, "Unknown category.");
+        }
+
+        if (!text) {
+            return badRequest(res, "Please enter a question.");
+        }
+
         if (text.length > MAX_QUESTION_LENGTH) {
-            return badRequest(res, `Questions can be at most ${MAX_QUESTION_LENGTH} characters.`);
+            return badRequest(
+                res,
+                `Questions can be at most ${MAX_QUESTION_LENGTH} characters.`
+            );
+        }
+
+        if (!Number.isInteger(points) || points < 1 || points > 100) {
+            return badRequest(res, "Points must be between 1 and 100.");
         }
 
         await pool.execute(
-            `INSERT INTO Questions (Test_id, category, question_text) VALUES (?, ?, ?)`,
-            [test.id, category, text]
+            `INSERT INTO Questions
+                (Test_id, category, question_text, points, image)
+             VALUES (?, ?, ?, ?, ?)`,
+            [test.id, category, text, points, image]
         );
+
         res.json({ success: true });
+
     } catch (err) {
         next(err);
     }
 });
+
 
 app.delete("/api/tests/:code/questions/:id", requireAdmin, async (req, res, next) => {
     try {
@@ -554,6 +604,7 @@ app.get("/api/tests/:code/results", requireAdmin, async (req, res, next) => {
 });
 
 // Test codes are short, so limit how fast they can be guessed
+
 app.post("/api/tests/:code/start", rateLimit(20, 60 * 1000), async (req, res, next) => {
     try {
         const [tests] = await pool.execute(
@@ -562,16 +613,39 @@ app.post("/api/tests/:code/start", rateLimit(20, 60 * 1000), async (req, res, ne
              WHERE test_code = ?`,
             [String(req.params.code).toUpperCase()]
         );
-        if (!tests[0]) return res.status(404).json({ success: false, error: "Test not found." });
 
+        if (!tests[0]) {
+            return res.status(404).json({
+                success: false,
+                error: "Test not found."
+            });
+        }
+
+        // Retrieve the question, points, and attached image.
         const [questions] = await pool.execute(
-            `SELECT category, question_text FROM Questions WHERE Test_id = ? ORDER BY Question_id`,
+            `SELECT Question_id, category, question_text, points, image
+             FROM Questions
+             WHERE Test_id = ?
+             ORDER BY Question_id`,
             [tests[0].id]
         );
 
-        const grouped = { objective: [], semi: [], qualitative: [] };
+        // Organize questions by category.
+        const grouped = {
+            objective: [],
+            semi: [],
+            qualitative: []
+        };
+
         for (const q of questions) {
-            if (grouped[q.category]) grouped[q.category].push(q.question_text);
+            if (grouped[q.category]) {
+                grouped[q.category].push({
+                    id: q.Question_id,
+                    text: q.question_text,
+                    points: Number(q.points) || 10,
+                    image: q.image || ""
+                });
+            }
         }
 
         res.json({
@@ -579,10 +653,12 @@ app.post("/api/tests/:code/start", rateLimit(20, 60 * 1000), async (req, res, ne
             questions: grouped,
             grading_guidelines: tests[0].grading_guidelines || ""
         });
+
     } catch (err) {
         next(err);
     }
 });
+
 
 async function askAI(system, user) {
     const { text } = await generateWithFailover(`${system}\n\n${user}`);

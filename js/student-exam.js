@@ -454,34 +454,25 @@ function safeSpeak(text) {
 
 // Load every question from every category into one random pool.
 // Each question keeps its own category for the exam log.
+
 function addAllQuestions() {
     const all = exam.testQuestions || {};
 
     Object.keys(all).forEach(category => {
         (all[category] || []).forEach(q => {
 
-            let questionText = typeof q === "string"
-                ? q
-                : (q.text ?? q.questionText ?? q.question);
-
-            if (typeof questionText !== "string") {
-                console.error("Invalid question format:", q);
-                return;
-            }
-
-            if (questionText === "[object Object]") {
-                questionText = "This test was saved incorrectly. Please ask your instructor to recreate it.";
-            }
-
             state.selectedQuestions.push({
-                category,
-                text: questionText,
-                points: q.points || 10,
-                image: q.image || ""
+                id: q.id,
+                category: category,
+                text: typeof q === "string" ? q : q.text,
+                points: typeof q === "string" ? 10 : Number(q.points) || 10,
+                image: typeof q === "string" ? "" : (q.image || "")
             });
+
         });
     });
 }
+
 
 // Ask next question
 function askNextQuestion() {
@@ -518,8 +509,8 @@ function askNextQuestion() {
 
     const picked = state.selectedQuestions.splice(randomIndex, 1)[0];
 
-    // Start a new entry in the exam log
     exam.current = {
+        id: picked.id,
         category: picked.category,
         question: picked.text,
         points: picked.points,
@@ -530,7 +521,9 @@ function askNextQuestion() {
     exam.lastRecordedAnswer = null;
 
     // Display the question
+    // Display the question text
     el.questionText.textContent = picked.text;
+    showQuestionImage(picked.image);
 
     // Enable response controls
     if (el.responseBox) {
