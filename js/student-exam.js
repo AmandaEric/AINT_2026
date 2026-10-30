@@ -459,114 +459,91 @@ function addAllQuestions() {
     const all = exam.testQuestions || {};
 
     Object.keys(all).forEach(category => {
-        (all[category] || []).forEach(q => {
+        const lowerCat = category.toLowerCase();
+        const questionsList = all[category] || all[lowerCat] || [];
 
-            // Extract text string safely whether q is a string or an object {id, text, points, image}
+        questionsList.forEach(q => {
+            // Extract text whether q is a string or an object { id, text, points, image }
             const questionText = typeof q === "string" ? q : (q.text || q.question_text || "");
 
             if (!questionText) return;
 
             state.selectedQuestions.push({
                 id: typeof q === "object" ? q.id : null,
-                category: category.toLowerCase(),
+                category: lowerCat,
                 text: questionText,
                 points: typeof q === "object" ? (Number(q.points) || 10) : 10,
                 image: typeof q === "object" ? (q.image || "") : ""
             });
-
         });
     });
 }
 
 
 // Ask next question
+// In student-exam.js -> askNextQuestion():
 function askNextQuestion() {
-    // Do not advance while an AI follow-up needs an answer.
-    if (followUpNeedsAnswer) {
-        return;
-    }
+    if (followUpNeedsAnswer) return;
+    if (!el.questionText) return;
 
-    if (!el.questionText) {
-        return;
-    }
-
-    // Save the answer to the previous question BEFORE the question
-    // text on screen is replaced
     saveUnsentAnswer();
 
     if (state.selectedQuestions.length === 0) {
-        el.questionText.textContent =
-            exam.log.length === 0
-                ? "This test has no questions."
-                : "That was the last question. Click Stop Test to submit your exam.";
+        el.questionText.textContent = exam.log.length === 0
+            ? "This test has no questions."
+            : "That was the last question. Click Stop Test to submit your exam.";
+        showQuestionImage(null);
         return;
     }
 
-    // Clear the response box for the new question
-    if (el.responseBox) {
-        el.responseBox.value = "";
-    }
+    if (el.responseBox) el.responseBox.value = "";
 
-    // Pick random question
-    const randomIndex = Math.floor(
-        Math.random() * state.selectedQuestions.length
-    );
-
+    const randomIndex = Math.floor(Math.random() * state.selectedQuestions.length);
     const picked = state.selectedQuestions.splice(randomIndex, 1)[0];
+
+    // Ensure text is a string
+    const textStr = typeof picked.text === "string" ? picked.text : (picked.text?.text || "");
 
     exam.current = {
         id: picked.id,
         category: picked.category,
-        question: picked.text,
+        question: textStr,
         points: picked.points,
+        image: picked.image || "",
         exchanges: []
     };
 
     exam.log.push(exam.current);
     exam.lastRecordedAnswer = null;
 
-    // Display the question
-    // Display the question text
-    el.questionText.textContent = picked.text;
+    // Automatically display text and image
+    el.questionText.textContent = textStr;
     showQuestionImage(picked.image);
 
-    // Enable response controls
-    if (el.responseBox) {
-        el.responseBox.disabled = false;
-    }
+    if (el.responseBox) el.responseBox.disabled = false;
+    if (el.listenButton) el.listenButton.disabled = false;
+    if (el.evaluateButton) el.evaluateButton.disabled = false;
+    if (el.evaluationBox) el.evaluationBox.innerHTML = "<p>Waiting for student response...</p>";
 
-    if (el.listenButton) {
-        el.listenButton.disabled = false;
-    }
-
-    if (el.evaluateButton) {
-        el.evaluateButton.disabled = false;
-    }
-
-    // Reset evaluation
-    if (el.evaluationBox) {
-        el.evaluationBox.innerHTML = "<p>Waiting for student response...</p>";
-    }
-
-    // Speak the question last, so a speech problem can't block the controls
-    safeSpeak(picked.text);
+    safeSpeak(textStr);
 }
 
 // Next question button
-on(el.nextButton, "click", askNextQuestion);
 const questionImage = document.getElementById("question-image");
 
 function showQuestionImage(src) {
-    if (!questionImage || !el.avatarContainer) return;
+    if (!questionImage) return;
 
-    if (src) {
+    if (src && typeof src === "string" && src.trim() !== "") {
         questionImage.src = src;
+        questionImage.style.display = "block";
         questionImage.hidden = false;
-        el.avatarContainer.classList.add("has-question-image");
+        if (el.avatarContainer) el.avatarContainer.classList.add("has-question-image");
     } else {
         questionImage.removeAttribute("src");
+        questionImage.style.display = "none";
         questionImage.hidden = true;
-        el.avatarContainer.classList.remove("has-question-image");
+        if (el.avatarContainer) el.avatarContainer.classList.remove("has-question-image");
     }
 }
 
@@ -683,27 +660,25 @@ async function handleEvaluate() {
         }
 
         if (hasFollowUp) {
-            // Lock Next until the student answers this follow-up.
             followUpNeedsAnswer = true;
             setQuestionButtonsEnabled(state.testRunning);
 
             addEvaluationLine("p", data.followUpQuestion, "Follow-up:");
 
-            // Display the follow-up as the current question.
+            // Display follow-up text
             el.questionText.textContent = data.followUpQuestion;
             el.responseBox.value = "";
 
-            // Let the student answer the follow-up.
+            // Keep the current question's image active (or update if follow-up provides a new image)
+            const currentImg = data.followUpImage || (exam.current ? exam.current.image : null);
+            showQuestionImage(currentImg);
+
             el.responseBox.disabled = false;
+            if (el.listenButton) el.listenButton.disabled = false;
 
-            if (el.listenButton) {
-                el.listenButton.disabled = false;
-            }
-
-            // Speak the follow-up with the animated avatar.
             safeSpeak(data.followUpQuestion);
-
-        } else {
+        }
+        else {
             // No more follow-up is needed, so Next can be used again.
             followUpNeedsAnswer = false;
             setQuestionButtonsEnabled(state.testRunning);
