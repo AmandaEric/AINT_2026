@@ -1,13 +1,13 @@
 /*
-- ============================================================
-- student-exam.js - THE STUDENT'S EXAM FLOW
-- Optional countdown timer, Start/Stop button, submitting the exam
-- for grading, picking and asking questions, and the Evaluate
-- button that gets AI follow-up questions.
+ * ============================================================
+ * student-exam.js - THE STUDENT'S EXAM FLOW
+ * Optional countdown timer, Start/Stop button, submitting the exam
+ * for grading, picking and asking questions, and the Evaluate
+ * button that gets AI follow-up questions.
  *
-- Requires avatar-speech.js to be loaded BEFORE this file
-- (provides speakAsAvatar and stopAvatarSpeech).
-- ============================================================
+ * Requires avatar-speech.js to be loaded BEFORE this file
+ * (provides speakAsAvatar and stopAvatarSpeech).
+ * ============================================================
  */
 
 // ==========================================
@@ -41,10 +41,27 @@ function replayQuestion() {
 
 setReplayEnabled(false);
 
-if (typeof on === "function") {
-    on(replayButton, "click", replayQuestion);
-} else if (replayButton) {
-    replayButton.addEventListener("click", replayQuestion);
+// Helper event binding logic
+const bindEvent = (element, event, handler) => {
+    if (typeof on === "function") {
+        on(element, event, handler);
+    } else if (element) {
+        element.addEventListener(event, handler);
+    }
+};
+
+bindEvent(replayButton, "click", replayQuestion);
+
+// Clears the response box and keeps the word count in step with it.
+// (updateWordCount lives in student-voice.js, which loads after this file.)
+function clearResponseBox() {
+    if (!el.responseBox) return;
+
+    el.responseBox.value = "";
+
+    if (typeof updateWordCount === "function") {
+        updateWordCount();
+    }
 }
 
 // ==========================================
@@ -115,6 +132,8 @@ function stopTimer() {
     setReplayEnabled(false);
     lastSpokenText = "";
 
+    showQuestionImage("");
+
     if (state.isListening && state.recognition) {
         state.recognition.stop();
     }
@@ -176,15 +195,6 @@ async function finishExam(timeUp = false) {
     }
     stopProctoring();
 }
-
-// Helper event binding logic
-const bindEvent = (element, event, handler) => {
-    if (typeof on === "function") {
-        on(element, event, handler);
-    } else if (element) {
-        element.addEventListener(event, handler);
-    }
-};
 
 bindEvent(el.startButton, "click", async () => {
     if (!state.testRunning) {
@@ -347,6 +357,8 @@ function safeSpeak(text) {
     }
 }
 
+// Load every question from every category into one random pool.
+// Each question keeps its category, points and image.
 function addAllQuestions() {
     const all = exam.testQuestions || {};
 
@@ -355,16 +367,17 @@ function addAllQuestions() {
         const questionsList = all[category] || all[lowerCat] || [];
 
         questionsList.forEach(q => {
-            const questionText = typeof q === "string" ? q : (q.text || q.question_text || "");
+            const isObject = typeof q === "object" && q !== null;
+            const questionText = isObject ? (q.text || q.question_text || "") : q;
 
-            if (!questionText) return;
+            if (typeof questionText !== "string" || !questionText) return;
 
             state.selectedQuestions.push({
-                id: typeof q === "object" ? q.id : null,
+                id: isObject ? q.id : null,
                 category: lowerCat,
                 text: questionText,
-                points: typeof q === "object" ? (Number(q.points) || 10) : 10,
-                image: typeof q === "object" ? (q.image || "") : ""
+                points: isObject ? (Number(q.points) || 10) : 10,
+                image: isObject ? (q.image || "") : ""
             });
         });
     });
@@ -376,12 +389,10 @@ function showQuestionImage(src) {
 
     if (src && typeof src === "string" && src.trim() !== "") {
         questionImage.src = src;
-        questionImage.style.display = "block";
         questionImage.hidden = false;
         if (el.avatarContainer) el.avatarContainer.classList.add("has-question-image");
     } else {
         questionImage.removeAttribute("src");
-        questionImage.style.display = "none";
         questionImage.hidden = true;
         if (el.avatarContainer) el.avatarContainer.classList.remove("has-question-image");
     }
@@ -390,7 +401,6 @@ function showQuestionImage(src) {
 function askNextQuestion() {
     if (followUpNeedsAnswer) return;
 
-    // Get reference directly if missing from el
     const questionTextEl = el.questionText || document.getElementById("questionText");
     if (!questionTextEl) return;
 
@@ -400,30 +410,29 @@ function askNextQuestion() {
         questionTextEl.textContent = (!exam.log || exam.log.length === 0)
             ? "This test has no questions."
             : "That was the last question. Click Stop Test to submit your exam.";
-        showQuestionImage(null);
+        showQuestionImage("");
         return;
     }
 
-    if (el.responseBox) el.responseBox.value = "";
+    clearResponseBox();
 
     const randomIndex = Math.floor(Math.random() * state.selectedQuestions.length);
     const picked = state.selectedQuestions.splice(randomIndex, 1)[0];
 
-    const textStr = typeof picked.text === "string" ? picked.text : (picked.text?.text || "");
-
+    // The image is NOT stored in the log. The log is sent to the server when
+    // the exam is submitted, and the image would be uploaded again for nothing.
     exam.current = {
         id: picked.id,
         category: picked.category,
-        question: textStr,
+        question: picked.text,
         points: picked.points,
-        image: picked.image || "",
         exchanges: []
     };
 
     exam.log.push(exam.current);
     exam.lastRecordedAnswer = null;
 
-    questionTextEl.textContent = textStr;
+    questionTextEl.textContent = picked.text;
     showQuestionImage(picked.image);
 
     if (el.responseBox) el.responseBox.disabled = false;
@@ -431,10 +440,10 @@ function askNextQuestion() {
     if (el.evaluateButton) el.evaluateButton.disabled = false;
     if (el.evaluationBox) el.evaluationBox.innerHTML = "<p>Waiting for student response...</p>";
 
-    safeSpeak(textStr);
+    // Speak the question last, so a speech problem can't block the controls
+    safeSpeak(picked.text);
 }
 
-// Ensure the Next button works when clicked
 bindEvent(el.nextButton, "click", askNextQuestion);
 
 // ==========================================
@@ -487,6 +496,7 @@ async function handleEvaluate() {
                     originalQuestion: originalQuestion,
                     studentResponse: answer,
                     category: exam.current ? exam.current.category : "",
+                    points: exam.current ? exam.current.points : 10,
                     testCode: exam.testCode
                 })
             }
@@ -511,7 +521,13 @@ async function handleEvaluate() {
         addEvaluationLine("h4", hasFollowUp ? "Follow-up Question" : "AI Evaluation");
 
         if (feedback) addEvaluationLine("p", feedback);
-        if (data.score !== undefined && data.score !== null) addEvaluationLine("p", String(data.score), "Score:");
+
+        if (data.score !== undefined && data.score !== null) {
+            const scoreText = data.maxPoints
+                ? `${data.score} / ${data.maxPoints}`
+                : String(data.score);
+            addEvaluationLine("p", scoreText, "Score:");
+        }
 
         if (hasFollowUp) {
             followUpNeedsAnswer = true;
@@ -520,10 +536,9 @@ async function handleEvaluate() {
             addEvaluationLine("p", data.followUpQuestion, "Follow-up:");
 
             if (questionTextEl) questionTextEl.textContent = data.followUpQuestion;
-            if (el.responseBox) el.responseBox.value = "";
+            clearResponseBox();
 
-            const currentImg = data.followUpImage || (exam.current ? exam.current.image : null);
-            showQuestionImage(currentImg);
+            // The question's image stays on screen for its follow-up.
 
             if (el.responseBox) el.responseBox.disabled = false;
             if (el.listenButton) el.listenButton.disabled = false;
