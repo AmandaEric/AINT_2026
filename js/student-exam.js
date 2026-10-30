@@ -459,20 +459,21 @@ function addAllQuestions() {
     const all = exam.testQuestions || {};
 
     Object.keys(all).forEach(category => {
-        const lowerCat = category.toLowerCase();
-        const questionsList = all[category] || all[lowerCat] || [];
+        (all[category] || []).forEach(q => {
 
-        questionsList.forEach(q => {
-            const questionText = typeof q === "string" ? q : (q.text || "");
+            // Extract text string safely whether q is a string or an object {id, text, points, image}
+            const questionText = typeof q === "string" ? q : (q.text || q.question_text || "");
+
             if (!questionText) return;
 
             state.selectedQuestions.push({
                 id: typeof q === "object" ? q.id : null,
-                category: lowerCat,
+                category: category.toLowerCase(),
                 text: questionText,
-                points: typeof q === "string" ? 10 : (Number(q.points) || 10),
-                image: typeof q === "string" ? "" : (q.image || "")
+                points: typeof q === "object" ? (Number(q.points) || 10) : 10,
+                image: typeof q === "object" ? (q.image || "") : ""
             });
+
         });
     });
 }

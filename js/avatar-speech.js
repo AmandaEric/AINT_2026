@@ -368,12 +368,11 @@ if ("speechSynthesis" in window) {
 
         await audio.play();
 
-    } catch (error) {
-        console.error("Avatar speech failed:", error);
-        clearFrameTimers();
-        setAvatarFrame("neutral");
-        releaseAudio();
-    }
+    } // ✅ Safe error handling
+        catch (error) {
+            console.warn("Avatar speech failed, falling back to text-only mode:", error);
+            // Keep the actual question text visible on screen even if TTS fails
+        }
 }
 
 let speechRequestId = 0;
