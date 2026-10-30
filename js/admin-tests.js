@@ -272,6 +272,9 @@
 
     async function addSavedQuestion(category, question) {
         try {
+            console.log("QUESTION BEING SAVED:", question);
+            console.log("QUESTION TEXT:", question.text);
+            console.log("QUESTION TEXT TYPE:", typeof question.text);
             await api(
                 `/api/tests/${encodeURIComponent(currentTestCode)}/questions`,
                 {
@@ -471,7 +474,7 @@
         };
 
         const totalQuestions = Object.values(questionPayload)
-            .reduce((total, group) => total + group.length, 0);
+            .reduce((total, group) => total + group.length, 0)
 
         if (totalQuestions === 0) {
             alert("Please add at least one question before creating the test.");

@@ -18,4 +18,7 @@ initAdminPage();
 
 console.log("AINT script loaded successfully.");
 
-console.log("Saved questions:", state.questions);
+// ✅ Reference the correct object populated by start/fetch
+if (typeof exam !== "undefined" && exam.testQuestions) {
+    console.log("Saved questions:", exam.testQuestions);
+}

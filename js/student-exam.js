@@ -459,16 +459,20 @@ function addAllQuestions() {
     const all = exam.testQuestions || {};
 
     Object.keys(all).forEach(category => {
-        (all[category] || []).forEach(q => {
+        const lowerCat = category.toLowerCase();
+        const questionsList = all[category] || all[lowerCat] || [];
+
+        questionsList.forEach(q => {
+            const questionText = typeof q === "string" ? q : (q.text || "");
+            if (!questionText) return;
 
             state.selectedQuestions.push({
-                id: q.id,
-                category: category,
-                text: typeof q === "string" ? q : q.text,
-                points: typeof q === "string" ? 10 : Number(q.points) || 10,
+                id: typeof q === "object" ? q.id : null,
+                category: lowerCat,
+                text: questionText,
+                points: typeof q === "string" ? 10 : (Number(q.points) || 10),
                 image: typeof q === "string" ? "" : (q.image || "")
             });
-
         });
     });
 }
