@@ -1,77 +1,58 @@
 /*
- * ============================================================
- * student-exam.js - THE STUDENT'S EXAM FLOW
- * Optional countdown timer, Start/Stop button, submitting the exam
- * for grading, picking and asking questions, and the Evaluate
- * button that gets AI follow-up questions.
+- ============================================================
+- student-exam.js - THE STUDENT'S EXAM FLOW
+- Optional countdown timer, Start/Stop button, submitting the exam
+- for grading, picking and asking questions, and the Evaluate
+- button that gets AI follow-up questions.
  *
- * Requires avatar-speech.js to be loaded BEFORE this file
- * (provides speakAsAvatar and stopAvatarSpeech).
- * ============================================================
+- Requires avatar-speech.js to be loaded BEFORE this file
+- (provides speakAsAvatar and stopAvatarSpeech).
+- ============================================================
  */
+
 // ==========================================
 // STUDENT: REPLAY QUESTION AUDIO
 // ==========================================
 
-// The replay button (id="replayButton" in main.html) lets the student
-// hear the current question again. It replays whatever was last spoken
-// by safeSpeak(): a normal question or an AI follow-up question.
-//
-// How it works:
-//   - safeSpeak() saves its text in lastSpokenText and enables the button
-//   - clicking the button speaks lastSpokenText again
-//   - stopTimer() disables the button when the exam ends or is stopped
-
 const replayButton = document.getElementById("replayButton");
 
-// The text of the question that was spoken most recently
 let lastSpokenText = "";
-// True while the student still needs to answer an AI follow-up.
 let followUpNeedsAnswer = false;
 
-// Turn the replay button on or off
 function setReplayEnabled(enabled) {
     if (replayButton) {
         replayButton.disabled = !enabled;
     }
 }
 
-// Speak the current question again
 function replayQuestion() {
-
-    // Nothing to replay yet, or the exam is not running
     if (!lastSpokenText || !state.testRunning) {
         return;
     }
 
-    // Cut off any speech that is still playing, so the two don't overlap
     if (typeof stopAvatarSpeech === "function") {
         stopAvatarSpeech();
     }
 
-    // Short delay: browsers can drop speech that starts the instant
-    // the previous speech is cancelled
     setTimeout(function () {
         safeSpeak(lastSpokenText);
     }, 100);
 }
 
-// Disabled until the first question has been spoken
 setReplayEnabled(false);
 
-on(replayButton, "click", replayQuestion);
+if (typeof on === "function") {
+    on(replayButton, "click", replayQuestion);
+} else if (replayButton) {
+    replayButton.addEventListener("click", replayQuestion);
+}
+
 // ==========================================
 // STUDENT: TIMER
 // ==========================================
 
-// state.seconds always counts UP (elapsed time, sent to the server).
-// If the test has a time limit, the display counts DOWN from it.
-// If the test has no time limit, the timer is hidden.
 function updateTimerDisplay() {
-
-    if (!el.timer) {
-        return;
-    }
+    if (!el.timer) return;
 
     if (!exam.timerEnabled) {
         el.timer.style.display = "none";
@@ -84,21 +65,16 @@ function updateTimerDisplay() {
     const minutes = Math.floor(remaining / 60);
     const seconds = remaining % 60;
 
-    el.timer.textContent =
-        `${minutes}:${String(seconds).padStart(2, "0")}`;
+    el.timer.textContent = `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
-
 
 function setQuestionButtonsEnabled(enabled) {
     if (el.nextButton) {
-        el.nextButton.disabled =
-            !enabled || followUpNeedsAnswer;
+        el.nextButton.disabled = !enabled || followUpNeedsAnswer;
     }
 }
 
-
 function startTimer() {
-
     state.testRunning = true;
 
     if (el.startButton) {
@@ -107,12 +83,10 @@ function startTimer() {
 
     setQuestionButtonsEnabled(true);
 
-    // Allow the student to type an answer
     if (el.responseBox) {
         el.responseBox.disabled = false;
     }
 
-    // Allow speech recognition
     if (el.listenButton) {
         el.listenButton.disabled = false;
     }
@@ -121,16 +95,13 @@ function startTimer() {
         state.seconds++;
         updateTimerDisplay();
 
-        // Time is up: auto-submit (only for timed tests)
         if (exam.timerEnabled && state.seconds >= exam.timeLimitSeconds) {
             finishExam(true);
         }
     }, 1000);
 }
 
-
 function stopTimer() {
-
     state.testRunning = false;
 
     if (el.startButton) {
@@ -141,7 +112,6 @@ function stopTimer() {
 
     setQuestionButtonsEnabled(false);
 
-    // Nothing to replay once the exam is stopped
     setReplayEnabled(false);
     lastSpokenText = "";
 
@@ -162,10 +132,7 @@ function stopTimer() {
 // STUDENT: SAVING ANSWERS
 // ==========================================
 
-// Saves whatever is in the response box, unless it is empty or was
-// already recorded by the Evaluate button. Prevents duplicate entries.
 function saveUnsentAnswer() {
-
     if (!exam.current || !el.responseBox || !el.questionText) {
         return;
     }
@@ -179,40 +146,21 @@ function saveUnsentAnswer() {
     recordAnswer(el.questionText.textContent, answer);
     exam.lastRecordedAnswer = answer;
 }
-// const responseBox = document.querySelector('.response');
-// const wordCountEl = document.getElementById('wordCount');
-
-// function updateWordCount() {
-//     const text = responseBox.value.trim();
-//     const count = text === '' ? 0 : text.split(/\s+/).length;
-//     wordCountEl.textContent = `Words: ${count}`;
-// }
-
-// responseBox.addEventListener('input', updateWordCount);
-// updateWordCount();
 
 // ==========================================
 // STUDENT: START / STOP / SUBMIT THE EXAM
 // ==========================================
 
-// Ends the exam and submits it. Used by the Stop button and by the
-// timer when time runs out. stopTimer() clears the interval, and the
-// exam.finishing flag keeps this from running twice.
 async function finishExam(timeUp = false) {
-
     if (exam.submitted || exam.finishing) {
         return;
     }
 
     exam.finishing = true;
 
-    // Save an answer that was typed or spoken
-    // but never sent with the Evaluate button
     saveUnsentAnswer();
-
     stopTimer();
 
-    // Stop the avatar mid-sentence and return it to neutral
     if (typeof stopAvatarSpeech === "function") {
         stopAvatarSpeech();
     }
@@ -229,168 +177,122 @@ async function finishExam(timeUp = false) {
     stopProctoring();
 }
 
-
-// Start / Stop button
-on(
-    el.startButton,
-    "click",
-    async () => {
-
-        // ---------- START ----------
-        if (!state.testRunning) {
-
-            if (el.studentName && !el.studentName.value.trim()) {
-                alert("Please enter your name first.");
-                return;
-            }
-
-            // Ask for the test code
-
-            const code = (
-                el.testCodeInput?.value || ""
-            ).trim().toUpperCase();
-
-            if (!code) {
-                alert("Please enter your test code.");
-                return;
-            }
-
-            // Check the code and get that test's questions
-            el.startButton.disabled = true;
-
-            try {
-
-                const response = await fetch(
-                    `${BACKEND_URL}/api/tests/${encodeURIComponent(code)}/start`,
-                    { method: "POST" }
-                );
-
-                if (response.status === 404) {
-                    alert("That test code was not found. Check it and try again.");
-                    return;
-                }
-
-                if (!response.ok) {
-                    throw new Error(`Server responded with ${response.status}`);
-                }
-
-                const data = await response.json();
-
-
-                exam.testCode = code;
-                exam.testQuestions = data.questions;
-
-                // Save the teacher's grading guidelines from the server
-                exam.gradingGuidelines = data.grading_guidelines || "";
-
-                // Optional timer settings from the server
-                const limitSeconds = Number(data.timeLimitMinutes) * 60;
-                exam.timerEnabled =
-                    Boolean(data.timerEnabled) &&
-                    Number.isFinite(limitSeconds) &&
-                    limitSeconds > 0;
-                exam.timeLimitSeconds = exam.timerEnabled ? limitSeconds : 0;
-
-                /* Hide student information after the test loads */
-                if (el.studentName) {
-                    el.studentName.style.display = "none";
-                }
-
-                if (el.testCodeInput) {
-                    el.testCodeInput.style.display = "none";
-                }
-
-                /* Expand the AI avatar */
-                if (el.avatarContainer) {
-                    el.avatarContainer.classList.add("avatar-container-large");
-                }
-
-            } catch (error) {
-
-                console.error("START ERROR:", error);
-
-                alert("Could not reach the server. Make sure the backend is running.");
-
-                return;
-
-            } finally {
-
-                el.startButton.disabled = false;
-
-            }
-
-            // Fresh attempt
-            exam.log = [];
-            exam.current = null;
-            exam.submitted = false;
-            exam.finishing = false;
-            exam.lastRecordedAnswer = null;
-            followUpNeedsAnswer = false;
-
-            state.seconds = 0;
-            state.selectedQuestions = [];
-
-            updateTimerDisplay();
-
-            startTimer();
-            startProctoring();
-            addAllQuestions();
-            askNextQuestion();
-
-            return;
-        }
-
-
-        // ---------- STOP = FINISH AND SUBMIT ----------
-        if (!confirm("Finish the exam and submit it for grading?")) {
-            return;
-        }
-
-        await finishExam();
+// Helper event binding logic
+const bindEvent = (element, event, handler) => {
+    if (typeof on === "function") {
+        on(element, event, handler);
+    } else if (element) {
+        element.addEventListener(event, handler);
     }
-);
+};
 
+bindEvent(el.startButton, "click", async () => {
+    if (!state.testRunning) {
+        if (el.studentName && !el.studentName.value.trim()) {
+            alert("Please enter your name first.");
+            return;
+        }
 
-// Send the finished exam to the server for grading
-async function submitExam() {
+        const code = (el.testCodeInput?.value || "").trim().toUpperCase();
 
-    if (exam.submitted) {
+        if (!code) {
+            alert("Please enter your test code.");
+            return;
+        }
+
+        el.startButton.disabled = true;
+
+        try {
+            const response = await fetch(
+                `${BACKEND_URL}/api/tests/${encodeURIComponent(code)}/start`,
+                { method: "POST" }
+            );
+
+            if (response.status === 404) {
+                alert("That test code was not found. Check it and try again.");
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(`Server responded with ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            exam.testCode = code;
+            exam.testQuestions = data.questions;
+            exam.gradingGuidelines = data.grading_guidelines || "";
+
+            const limitSeconds = Number(data.timeLimitMinutes) * 60;
+            exam.timerEnabled =
+                Boolean(data.timerEnabled) &&
+                Number.isFinite(limitSeconds) &&
+                limitSeconds > 0;
+            exam.timeLimitSeconds = exam.timerEnabled ? limitSeconds : 0;
+
+            if (el.studentName) el.studentName.style.display = "none";
+            if (el.testCodeInput) el.testCodeInput.style.display = "none";
+            if (el.avatarContainer) el.avatarContainer.classList.add("avatar-container-large");
+
+        } catch (error) {
+            console.error("START ERROR:", error);
+            alert("Could not reach the server. Make sure the backend is running.");
+            return;
+        } finally {
+            el.startButton.disabled = false;
+        }
+
+        exam.log = [];
+        exam.current = null;
+        exam.submitted = false;
+        exam.finishing = false;
+        exam.lastRecordedAnswer = null;
+        followUpNeedsAnswer = false;
+
+        state.seconds = 0;
+        state.selectedQuestions = [];
+
+        updateTimerDisplay();
+        startTimer();
+        startProctoring();
+        addAllQuestions();
+        askNextQuestion();
+
         return;
     }
 
+    if (!confirm("Finish the exam and submit it for grading?")) {
+        return;
+    }
+
+    await finishExam();
+});
+
+async function submitExam() {
+    if (exam.submitted) return;
+
     if (exam.log.length === 0) {
-
         if (el.evaluationBox) {
-            el.evaluationBox.innerHTML =
-                "<p>No questions were answered, so nothing was submitted.</p>";
+            el.evaluationBox.innerHTML = "<p>No questions were answered, so nothing was submitted.</p>";
         }
-
         return;
     }
 
     if (el.evaluationBox) {
-        el.evaluationBox.innerHTML =
-            "<p>Submitting your exam for grading...</p>";
+        el.evaluationBox.innerHTML = "<p>Submitting your exam for grading...</p>";
     }
 
     try {
-
         const response = await fetch(
             `${BACKEND_URL}/api/tests/${encodeURIComponent(exam.testCode)}/submit`,
             {
-
                 method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json"
-                },
-
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     studentName: el.studentName ? el.studentName.value.trim() : "",
                     durationSeconds: state.seconds,
                     log: exam.log
                 })
-
             }
         );
 
@@ -412,7 +314,6 @@ async function submitExam() {
         }
 
     } catch (error) {
-
         console.error("SUBMIT ERROR:", error);
 
         if (el.evaluationBox) {
@@ -422,22 +323,16 @@ async function submitExam() {
                 <button type="button" onclick="submitExam()">Try again</button>
             `;
         }
-
     }
 }
 
-// Make submitExam available to the generated "Try again" button
 window.submitExam = submitExam;
 
 // ==========================================
 // STUDENT: PICKING AND ASKING QUESTIONS
 // ==========================================
 
-// Speaks text with the animated avatar. If the avatar script failed to
-// load (or throws), the exam keeps working without speech.
-// Also remembers the text so the replay button can speak it again.
 function safeSpeak(text) {
-
     lastSpokenText = text;
     setReplayEnabled(true);
 
@@ -452,9 +347,6 @@ function safeSpeak(text) {
     }
 }
 
-// Load every question from every category into one random pool.
-// Each question keeps its own category for the exam log.
-
 function addAllQuestions() {
     const all = exam.testQuestions || {};
 
@@ -463,7 +355,6 @@ function addAllQuestions() {
         const questionsList = all[category] || all[lowerCat] || [];
 
         questionsList.forEach(q => {
-            // Extract text whether q is a string or an object { id, text, points, image }
             const questionText = typeof q === "string" ? q : (q.text || q.question_text || "");
 
             if (!questionText) return;
@@ -479,59 +370,8 @@ function addAllQuestions() {
     });
 }
 
-
-// Ask next question
-// In student-exam.js -> askNextQuestion():
-function askNextQuestion() {
-    if (followUpNeedsAnswer) return;
-    if (!el.questionText) return;
-
-    saveUnsentAnswer();
-
-    if (state.selectedQuestions.length === 0) {
-        el.questionText.textContent = exam.log.length === 0
-            ? "This test has no questions."
-            : "That was the last question. Click Stop Test to submit your exam.";
-        showQuestionImage(null);
-        return;
-    }
-
-    if (el.responseBox) el.responseBox.value = "";
-
-    const randomIndex = Math.floor(Math.random() * state.selectedQuestions.length);
-    const picked = state.selectedQuestions.splice(randomIndex, 1)[0];
-
-    // Ensure text is a string
-    const textStr = typeof picked.text === "string" ? picked.text : (picked.text?.text || "");
-
-    exam.current = {
-        id: picked.id,
-        category: picked.category,
-        question: textStr,
-        points: picked.points,
-        image: picked.image || "",
-        exchanges: []
-    };
-
-    exam.log.push(exam.current);
-    exam.lastRecordedAnswer = null;
-
-    // Automatically display text and image
-    el.questionText.textContent = textStr;
-    showQuestionImage(picked.image);
-
-    if (el.responseBox) el.responseBox.disabled = false;
-    if (el.listenButton) el.listenButton.disabled = false;
-    if (el.evaluateButton) el.evaluateButton.disabled = false;
-    if (el.evaluationBox) el.evaluationBox.innerHTML = "<p>Waiting for student response...</p>";
-
-    safeSpeak(textStr);
-}
-
-// Next question button
-const questionImage = document.getElementById("question-image");
-
 function showQuestionImage(src) {
+    const questionImage = document.getElementById("question-image");
     if (!questionImage) return;
 
     if (src && typeof src === "string" && src.trim() !== "") {
@@ -547,15 +387,61 @@ function showQuestionImage(src) {
     }
 }
 
+function askNextQuestion() {
+    if (followUpNeedsAnswer) return;
+
+    // Get reference directly if missing from el
+    const questionTextEl = el.questionText || document.getElementById("questionText");
+    if (!questionTextEl) return;
+
+    saveUnsentAnswer();
+
+    if (!state.selectedQuestions || state.selectedQuestions.length === 0) {
+        questionTextEl.textContent = (!exam.log || exam.log.length === 0)
+            ? "This test has no questions."
+            : "That was the last question. Click Stop Test to submit your exam.";
+        showQuestionImage(null);
+        return;
+    }
+
+    if (el.responseBox) el.responseBox.value = "";
+
+    const randomIndex = Math.floor(Math.random() * state.selectedQuestions.length);
+    const picked = state.selectedQuestions.splice(randomIndex, 1)[0];
+
+    const textStr = typeof picked.text === "string" ? picked.text : (picked.text?.text || "");
+
+    exam.current = {
+        id: picked.id,
+        category: picked.category,
+        question: textStr,
+        points: picked.points,
+        image: picked.image || "",
+        exchanges: []
+    };
+
+    exam.log.push(exam.current);
+    exam.lastRecordedAnswer = null;
+
+    questionTextEl.textContent = textStr;
+    showQuestionImage(picked.image);
+
+    if (el.responseBox) el.responseBox.disabled = false;
+    if (el.listenButton) el.listenButton.disabled = false;
+    if (el.evaluateButton) el.evaluateButton.disabled = false;
+    if (el.evaluationBox) el.evaluationBox.innerHTML = "<p>Waiting for student response...</p>";
+
+    safeSpeak(textStr);
+}
+
+// Ensure the Next button works when clicked
+bindEvent(el.nextButton, "click", askNextQuestion);
+
 // ==========================================
 // STUDENT: AI EVALUATION (follow-up questions)
 // ==========================================
 
-// Adds one line of text to the evaluation box.
-// Uses textContent so AI output can't inject HTML.
-// If "label" is given, it is shown in bold before the text.
 function addEvaluationLine(tag, text, label) {
-
     const node = document.createElement(tag);
 
     if (label) {
@@ -567,97 +453,65 @@ function addEvaluationLine(tag, text, label) {
         node.textContent = text;
     }
 
-    el.evaluationBox.appendChild(node);
+    if (el.evaluationBox) {
+        el.evaluationBox.appendChild(node);
+    }
 }
 
-
 async function handleEvaluate() {
+    const answer = el.responseBox ? el.responseBox.value.trim() : "";
 
-    const answer = el.responseBox.value.trim();
-
-    // Make sure student answered
     if (answer === "") {
-        el.evaluationBox.innerHTML =
-            "<p>Please provide an answer before evaluating.</p>";
+        if (el.evaluationBox) {
+            el.evaluationBox.innerHTML = "<p>Please provide an answer before evaluating.</p>";
+        }
         return;
     }
 
-    // Save the question BEFORE the AI changes it
-    const originalQuestion = el.questionText.textContent;
+    const questionTextEl = el.questionText || document.getElementById("questionText");
+    const originalQuestion = questionTextEl ? questionTextEl.textContent : "";
 
-    // Record this answer for grading at the end of the exam
     recordAnswer(originalQuestion, answer);
     exam.lastRecordedAnswer = answer;
 
-    // Show loading
-    el.evaluationBox.innerHTML = "<p>AI is thinking...</p>";
-
-    el.evaluateButton.disabled = true;
+    if (el.evaluationBox) el.evaluationBox.innerHTML = "<p>AI is thinking...</p>";
+    if (el.evaluateButton) el.evaluateButton.disabled = true;
 
     try {
-
-        console.log("Sending answer to AI...");
-
         const response = await fetch(
             `${BACKEND_URL}/api/generate-followup`,
             {
-
                 method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json"
-                },
-
-                // The server looks up the teacher's grading guidelines
-                // itself from the test code.
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     originalQuestion: originalQuestion,
                     studentResponse: answer,
                     category: exam.current ? exam.current.category : "",
                     testCode: exam.testCode
                 })
-
             }
         );
 
         if (!response.ok) {
-            // Include the server's reason (each AI provider's error) when it sends one
             let detail = "";
             try {
                 const body = await response.json();
                 detail = body.details || body.error || "";
-            } catch {
-                // response had no JSON body
-            }
-            throw new Error(
-                `Server responded with ${response.status}${detail ? ": " + detail : ""}`
-            );
+            } catch {}
+            throw new Error(`Server responded with ${response.status}${detail ? ": " + detail : ""}`);
         }
 
         const data = await response.json();
 
-        console.log("AI RESPONSE:", data);
-
         const feedback = data.evaluation || data.feedback || "";
-        const hasFollowUp = Boolean(
-            data.needsFollowUp && data.followUpQuestion
-        );
+        const hasFollowUp = Boolean(data.needsFollowUp && data.followUpQuestion);
 
-        // Print the AI's response
-        el.evaluationBox.innerHTML = "";
+        if (el.evaluationBox) el.evaluationBox.innerHTML = "";
 
-        addEvaluationLine(
-            "h4",
-            hasFollowUp ? "Follow-up Question" : "AI Evaluation"
-        );
+        addEvaluationLine("h4", hasFollowUp ? "Follow-up Question" : "AI Evaluation");
 
-        if (feedback) {
-            addEvaluationLine("p", feedback);
-        }
-
-        if (data.score !== undefined && data.score !== null) {
-            addEvaluationLine("p", String(data.score), "Score:");
-        }
+        if (feedback) addEvaluationLine("p", feedback);
+        if (data.score !== undefined && data.score !== null) addEvaluationLine("p", String(data.score), "Score:");
 
         if (hasFollowUp) {
             followUpNeedsAnswer = true;
@@ -665,21 +519,17 @@ async function handleEvaluate() {
 
             addEvaluationLine("p", data.followUpQuestion, "Follow-up:");
 
-            // Display follow-up text
-            el.questionText.textContent = data.followUpQuestion;
-            el.responseBox.value = "";
+            if (questionTextEl) questionTextEl.textContent = data.followUpQuestion;
+            if (el.responseBox) el.responseBox.value = "";
 
-            // Keep the current question's image active (or update if follow-up provides a new image)
             const currentImg = data.followUpImage || (exam.current ? exam.current.image : null);
             showQuestionImage(currentImg);
 
-            el.responseBox.disabled = false;
+            if (el.responseBox) el.responseBox.disabled = false;
             if (el.listenButton) el.listenButton.disabled = false;
 
             safeSpeak(data.followUpQuestion);
-        }
-        else {
-            // No more follow-up is needed, so Next can be used again.
+        } else {
             followUpNeedsAnswer = false;
             setQuestionButtonsEnabled(state.testRunning);
 
@@ -687,19 +537,16 @@ async function handleEvaluate() {
         }
 
     } catch (error) {
-
         console.error("AI ERROR:", error);
-
-        el.evaluationBox.innerHTML = `
-            <h4>AI Connection Error</h4>
-            <p>The AI is temporarily unavailable. Please try again in a moment.</p>
-        `;
-
+        if (el.evaluationBox) {
+            el.evaluationBox.innerHTML = `
+                <h4>AI Connection Error</h4>
+                <p>The AI is temporarily unavailable. Please try again in a moment.</p>
+            `;
+        }
     }
 
-    el.evaluateButton.disabled = false;
+    if (el.evaluateButton) el.evaluateButton.disabled = false;
 }
 
-
-// Evaluate button
-on(el.evaluateButton, "click", handleEvaluate);
+bindEvent(el.evaluateButton, "click", handleEvaluate);
