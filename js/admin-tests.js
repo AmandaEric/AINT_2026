@@ -462,11 +462,7 @@
         const name = $("testName")?.value.trim() || "";
 
         // Each question is now an object: { text, points, image }
-        const toPayload = (q) => ({
-            text: q.text,
-            points: q.points || DEFAULT_POINTS,
-            image: q.image || null,
-        });
+        const toPayload = (q) => q.text;
 
         const questionPayload = {
             objective: questions.objective.map(toPayload),

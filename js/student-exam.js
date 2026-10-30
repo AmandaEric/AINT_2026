@@ -460,23 +460,17 @@ function addAllQuestions() {
     Object.keys(all).forEach(category => {
         (all[category] || []).forEach(q => {
 
-            // If the question is already a string, use it.
-            let questionText;
+            let questionText = typeof q === "string"
+                ? q
+                : (q.text ?? q.questionText ?? q.question);
 
-            if (typeof q === "string") {
-                questionText = q;
-            } else {
-                // Try common property names.
-                questionText =
-                    q.text ??
-                    q.questionText ??
-                    q.question;
-            }
-
-            // Make sure we have actual text.
             if (typeof questionText !== "string") {
                 console.error("Invalid question format:", q);
                 return;
+            }
+
+            if (questionText === "[object Object]") {
+                questionText = "This test was saved incorrectly. Please ask your instructor to recreate it.";
             }
 
             state.selectedQuestions.push({
