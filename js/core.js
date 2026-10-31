@@ -2,7 +2,8 @@
  * ============================================================
  * core.js - SHARED FOUNDATION (load first)
  * Helpers (on, escapeHtml), the 'el' object holding every DOM element,
- * BACKEND_URL, the shared 'state' and 'exam' objects, and recordAnswer().
+ * BACKEND_URL, shared limits, the shared 'state' and 'exam' objects,
+ * and recordAnswer().
  * Every other file depends on this one.
  * ============================================================
  */
@@ -29,6 +30,20 @@ function escapeHtml(text) {
 }
 
 // ==========================================
+// LIMITS: one place to change them in the browser
+// ==========================================
+
+// These must match the limits in server.js
+// (MAX_QUESTION_LENGTH, MAX_GUIDELINES_LENGTH, DEFAULT_POINTS, MAX_POINTS).
+// The server is the one that really enforces them.
+const AINT_LIMITS = {
+    defaultPoints: 10,
+    maxPoints: 100,
+    maxQuestionLength: 1000,
+    maxGuidelinesLength: 5000
+};
+
+// ==========================================
 // ELEMENTS: every DOM element the app uses
 // ==========================================
 
@@ -39,17 +54,14 @@ const el = {
     startButton: document.querySelector(".start"),
     nextButton: document.querySelector("#next-button"),
 
-    // // Question category buttons
-    // objective: document.querySelector(".objective"),
-    // semiButton: document.querySelector(".semi"),
-    // qualatativeButton: document.querySelector(".qualitative"),
-
     // Question
     questionText: document.querySelector(".question-text"),
+    questionImage: document.getElementById("question-image"),
 
     // Student response
     listenButton: document.querySelector(".listen"),
     responseBox: document.querySelector(".response"),
+    wordCount: document.getElementById("wordCount"),
 
     // AI evaluation
     evaluateButton: document.querySelector(".evaluate"),
@@ -72,13 +84,20 @@ const el = {
     qualitativeInput: document.getElementById("qualitativeInput"),
     grading_guidelines: document.getElementById("grading_guidelines"),
 
+    // Admin points and image inputs (one pair per category)
+    objectivePoints: document.getElementById("objectivePoints"),
+    semiPoints: document.getElementById("semiPoints"),
+    qualitativePoints: document.getElementById("qualitativePoints"),
+    objectiveImage: document.getElementById("objectiveImage"),
+    semiImage: document.getElementById("semiImage"),
+    qualitativeImage: document.getElementById("qualitativeImage"),
+
     // Admin add buttons
     objectiveAdd: document.getElementById("objectiveAdd"),
     semiAdd: document.getElementById("semiAdd"),
     qualitativeAdd: document.getElementById("qualitativeAdd"),
     guidelinesAdd: document.getElementById("guidelinesAdd"),
 
-    
     // Student exam information
     studentName: document.querySelector(".student-name"),
     testCodeInput: document.querySelector(".test-code"),
@@ -124,10 +143,34 @@ const el = {
 // STATE: config and data shared between files
 // ==========================================
 
+// On your own computer the page talks to the local server.
+// On a host such as Railway, the page and the API share an address,
+// so the URL is empty and requests stay on the same site.
 const BACKEND_URL =
-  location.hostname === "127.0.0.1" || location.hostname === "localhost"
-    ? "http://localhost:3000"
-    : "";
+    location.hostname === "127.0.0.1" || location.hostname === "localhost"
+        ? "http://localhost:3000"
+        : "";
+
+// Older versions of the admin page saved a question draft in the browser.
+// admin-tests.js now keeps its draft in memory, so this is only kept
+// because main.js still reads state.questions. Bad saved data is ignored.
+function loadSavedQuestions() {
+    try {
+        const saved = JSON.parse(localStorage.getItem("aintQuestions"));
+
+        if (saved && typeof saved === "object") {
+            return saved;
+        }
+    } catch {
+        // fall through to the empty default
+    }
+
+    return {
+        objective: [],
+        semi: [],
+        qualitative: []
+    };
+}
 
 const state = {
 
@@ -136,16 +179,11 @@ const state = {
     timerInterval: null,
     testRunning: false,
 
-    // Question bank (the admin's draft, saved in the browser)
-    questions: JSON.parse(
-        localStorage.getItem("aintQuestions")
-    ) || {
-        objective: [],
-        semi: [],
-        qualitative: []
-    },
+    // Legacy admin draft (see loadSavedQuestions above)
+    questions: loadSavedQuestions(),
 
-    // Questions currently available to student
+    // Questions currently available to the student.
+    // Each one is { id, category, text, points, image }.
     selectedQuestions: [],
 
     // Speech recognition
@@ -161,16 +199,28 @@ let currentCategory = null;
 // EXAM LOG (everything sent to the AI for grading)
 // ------------------------------------------
 
-// log           = one entry per question asked
-//                 { category, question, exchanges: [{ question, answer }] }
-// current       = the entry for the question on screen right now
-// testCode      = the code the student entered
-// testQuestions = that test's questions, sent by the server
+// log                = one entry per question asked
+//                      { id, category, question, points,
+//                        exchanges: [{ question, answer }] }
+// current            = the entry for the question on screen right now
+// testCode           = the code the student entered
+// testQuestions      = that test's questions, sent by the server.
+//                      Each is { id, text, points, image }.
+// gradingGuidelines  = the teacher's grading guidelines for this test
+// timerEnabled       = true if the test has a time limit
+// timeLimitSeconds   = the time limit, in seconds (0 when there is none)
+// lastRecordedAnswer = stops the same answer being saved twice
+// finishing          = true while the exam is being submitted
 const exam = {
     log: [],
     current: null,
     submitted: false,
+    finishing: false,
+    lastRecordedAnswer: null,
     testCode: null,
+    gradingGuidelines: "",
+    timerEnabled: false,
+    timeLimitSeconds: 0,
     testQuestions: {
         objective: [],
         semi: [],

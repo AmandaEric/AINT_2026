@@ -6,14 +6,29 @@
    - Create tests
    - View existing tests
    - Edit test names, questions, grading guidelines, and timer
+
+   Needs core.js to be loaded first (BACKEND_URL, AINT_LIMITS).
    ========================================================== */
 
 (() => {
     "use strict";
     const API = BACKEND_URL;   // defined in core.js
 
-    const DEFAULT_POINTS = 10;
-    const MAX_POINTS = 100;
+    // Limits come from core.js so they are changed in one place.
+    // The fallback only matters if core.js is an older version.
+    const LIMITS = typeof AINT_LIMITS !== "undefined"
+        ? AINT_LIMITS
+        : {
+            defaultPoints: 10,
+            maxPoints: 100,
+            maxQuestionLength: 1000,
+            maxGuidelinesLength: 5000,
+        };
+
+    const DEFAULT_POINTS = LIMITS.defaultPoints;
+    const MAX_POINTS = LIMITS.maxPoints;
+    const MAX_QUESTION_LENGTH = LIMITS.maxQuestionLength;
+    const MAX_GUIDELINES_LENGTH = LIMITS.maxGuidelinesLength;
 
     const categories = {
         objective: {
@@ -228,8 +243,8 @@
             return;
         }
 
-        if (text.length > 1000) {
-            alert("Questions can be at most 1000 characters.");
+        if (text.length > MAX_QUESTION_LENGTH) {
+            alert(`Questions can be at most ${MAX_QUESTION_LENGTH} characters.`);
             return;
         }
 
@@ -272,9 +287,6 @@
 
     async function addSavedQuestion(category, question) {
         try {
-            console.log("QUESTION BEING SAVED:", question);
-            console.log("QUESTION TEXT:", question.text);
-            console.log("QUESTION TEXT TYPE:", typeof question.text);
             await api(
                 `/api/tests/${encodeURIComponent(currentTestCode)}/questions`,
                 {
@@ -339,10 +351,7 @@
 
     function renderGuidelines() {
         const list = $("guidelinesList");
-        if (!list) {
-            console.error('Could not find element with id="guidelinesList".');
-            return;
-        }
+        if (!list) return;   // not on a page that has the guidelines list
 
         list.replaceChildren();
 
@@ -385,8 +394,8 @@
             return;
         }
 
-        if (text.length > 5000) {
-            alert("Guidelines can be at most 5000 characters each.");
+        if (text.length > MAX_GUIDELINES_LENGTH) {
+            alert(`Guidelines can be at most ${MAX_GUIDELINES_LENGTH} characters each.`);
             return;
         }
 
@@ -395,8 +404,8 @@
             0
         );
 
-        if (totalLength + text.length > 5000) {
-            alert("The combined grading guidelines cannot exceed 5000 characters.");
+        if (totalLength + text.length > MAX_GUIDELINES_LENGTH) {
+            alert(`The combined grading guidelines cannot exceed ${MAX_GUIDELINES_LENGTH} characters.`);
             return;
         }
 
@@ -464,7 +473,7 @@
         const button = $("createTest");
         const name = $("testName")?.value.trim() || "";
 
-        // Each question is now an object: { text, points, image }
+        // Each question is sent as an object: { text, points, image }
         const toPayload = (q) => ({
             text: q.text,
             points: q.points || DEFAULT_POINTS,
@@ -478,7 +487,7 @@
         };
 
         const totalQuestions = Object.values(questionPayload)
-            .reduce((total, group) => total + group.length, 0)
+            .reduce((total, group) => total + group.length, 0);
 
         if (totalQuestions === 0) {
             alert("Please add at least one question before creating the test.");
@@ -639,7 +648,7 @@
                 const guidelinesInput = document.createElement("textarea");
                 guidelinesInput.id = "editTestGuidelines";
                 guidelinesInput.rows = 5;
-                guidelinesInput.maxLength = 5000;
+                guidelinesInput.maxLength = MAX_GUIDELINES_LENGTH;
                 guidelinesInput.value = currentTestGuidelines;
                 guidelinesInput.placeholder =
                     "Enter the grading guidelines for this test...";
@@ -824,6 +833,22 @@
     }
 
     function initialize() {
+        // This file is also loaded on the student page. Do nothing there.
+        const onAdminPage =
+            $("createScreen") || $("testsScreen") || $("createTest") || $("myTests");
+
+        if (!onAdminPage) return;
+
+        // Keep the question boxes and points inputs in step with the limits
+        for (const config of Object.values(categories)) {
+            if ($(config.input)) $(config.input).maxLength = MAX_QUESTION_LENGTH;
+
+            if ($(config.points)) {
+                $(config.points).min = 1;
+                $(config.points).max = MAX_POINTS;
+            }
+        }
+
         // Add-question buttons.
         for (const [category, config] of Object.entries(categories)) {
             $(config.button)?.addEventListener("click", () => {
@@ -884,7 +909,12 @@
         // Display the empty guidelines state immediately.
         renderGuidelines();
 
-        // Initial screen is controlled by the admin login script.
+        // On a stand-alone "My tests" page (no menu button), load the list now.
+        if ($("myTests") && !$("menuViewButton")) {
+            loadTests();
+        }
+
+        // Otherwise the initial screen is controlled by the admin login script.
     }
 
     if (document.readyState === "loading") {
