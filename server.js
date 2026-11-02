@@ -565,7 +565,81 @@ app.post("/api/tests/:code/questions", requireAdmin, async (req, res, next) => {
     }
 });
 
+// Update an existing question's text and point value.
+app.patch(
+    "/api/tests/:code/questions/:id",
+    requireAdmin,
+    async (req, res, next) => {
+        try {
+            // Confirm this test belongs to the logged-in admin.
+            const test = await getOwnedTest(
+                req.params.code,
+                req.admin.Admin_id
+            );
 
+            if (!test) {
+                return res.status(404).json({
+                    success: false,
+                    error: "Test not found."
+                });
+            }
+
+            // Validate the question ID.
+            const questionId = Number(req.params.id);
+
+            if (!Number.isInteger(questionId) || questionId <= 0) {
+                return badRequest(res, "Invalid question ID.");
+            }
+
+            // Validate the updated question text.
+            const text = String(req.body.text || "").trim();
+
+            if (!text) {
+                return badRequest(res, "Question text cannot be empty.");
+            }
+
+            if (text.length > MAX_QUESTION_LENGTH) {
+                return badRequest(
+                    res,
+                    `Questions can be at most ${MAX_QUESTION_LENGTH} characters.`
+                );
+            }
+
+            // Validate the updated point value.
+            let points;
+
+            try {
+                points = cleanPoints(req.body.points);
+            } catch (err) {
+                return badRequest(res, err.message);
+            }
+
+            // Update only this question in this admin's test.
+            // The existing image is preserved.
+            const [result] = await pool.execute(
+                `UPDATE Questions
+                 SET question_text = ?, points = ?
+                 WHERE Question_id = ? AND Test_id = ?`,
+                [text, points, questionId, test.id]
+            );
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: "Question not found."
+                });
+            }
+
+            res.json({
+                success: true,
+                message: "Question updated successfully."
+            });
+
+        } catch (err) {
+            next(err);
+        }
+    }
+);
 app.delete("/api/tests/:code/questions/:id", requireAdmin, async (req, res, next) => {
     try {
         const test = await getOwnedTest(req.params.code, req.admin.Admin_id);

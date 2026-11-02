@@ -197,6 +197,7 @@
 
             item.appendChild(text);
 
+            // Show the existing question image, if there is one.
             if (question.image) {
                 const thumb = document.createElement("img");
                 thumb.src = question.image;
@@ -207,6 +208,12 @@
                 item.appendChild(thumb);
             }
 
+            // Edit button.
+            const edit = makeButton("Edit", "edit-question", () => {
+                showQuestionEditor(category, question, index, item);
+            });
+
+            // Remove button.
             const remove = makeButton("Remove", "remove-question", () => {
                 if (question.id && currentTestCode && editingTest) {
                     deleteSavedQuestion(category, question, item);
@@ -217,9 +224,110 @@
                 renderQuestions(category);
             });
 
-            item.appendChild(remove);
+            item.append(edit, remove);
             list.appendChild(item);
         });
+    }
+    function showQuestionEditor(category, question, index, item) {
+        item.replaceChildren();
+
+        const editor = document.createElement("div");
+        editor.className = "question-editor";
+
+        // Question text area.
+        const questionLabel = document.createElement("label");
+        questionLabel.textContent = "Question";
+
+        const questionInput = document.createElement("textarea");
+        questionInput.className = "admin-question-text";
+        questionInput.rows = 4;
+        questionInput.maxLength = MAX_QUESTION_LENGTH;
+        questionInput.value = question.text;
+
+        // Points input.
+        const pointsLabel = document.createElement("label");
+        pointsLabel.textContent = "Points";
+
+        const pointsInput = document.createElement("input");
+        pointsInput.type = "number";
+        pointsInput.min = "1";
+        pointsInput.max = String(MAX_POINTS);
+        pointsInput.value = question.points || DEFAULT_POINTS;
+
+        // Save changes.
+        const save = makeButton("Save Changes", "", async () => {
+            const newText = questionInput.value.trim();
+            const newPoints = Number(pointsInput.value);
+
+            if (!newText) {
+                alert("Question text cannot be empty.");
+                questionInput.focus();
+                return;
+            }
+
+            if (newText.length > MAX_QUESTION_LENGTH) {
+                alert(`Questions can be at most ${MAX_QUESTION_LENGTH} characters.`);
+                return;
+            }
+
+            if (!Number.isInteger(newPoints) ||
+                newPoints < 1 ||
+                newPoints > MAX_POINTS) {
+                alert(`Points must be between 1 and ${MAX_POINTS}.`);
+                pointsInput.focus();
+                return;
+            }
+
+            const updatedQuestion = {
+                ...question,
+                text: newText,
+                points: newPoints
+            };
+
+            // Saved question: update it on the server.
+            if (question.id && currentTestCode && editingTest) {
+                try {
+                    await api(
+                        `/api/tests/${encodeURIComponent(currentTestCode)}/questions/${question.id}`,
+                        {
+                            method: "PATCH",
+                            body: JSON.stringify({
+                                text: newText,
+                                points: newPoints
+                            })
+                        }
+                    );
+
+                    questions[category][index] = updatedQuestion;
+                    renderQuestions(category);
+                } catch (error) {
+                    alert(`Could not save question: ${error.message}`);
+                }
+
+                return;
+            }
+
+            // Question not saved yet: update it in browser memory.
+            questions[category][index] = updatedQuestion;
+            renderQuestions(category);
+        });
+
+        // Cancel editing.
+        const cancel = makeButton("Cancel", "", () => {
+            renderQuestions(category);
+        });
+
+        editor.append(
+            questionLabel,
+            questionInput,
+            pointsLabel,
+            pointsInput,
+            save,
+            cancel
+        );
+
+        item.appendChild(editor);
+        questionInput.focus();
     }
 
     // Clears the points and image inputs for one category
@@ -489,6 +597,11 @@
         const totalQuestions = Object.values(questionPayload)
             .reduce((total, group) => total + group.length, 0);
 
+        if (editingTest) {
+            await saveTestDetails();
+            return;
+        }
+
         if (totalQuestions === 0) {
             alert("Please add at least one question before creating the test.");
             return;
@@ -602,6 +715,8 @@
             currentTestGuidelines = test.gradingGuidelines || "";
             editingTest = true;
 
+            // Load the existing questions into the same question lists
+            // used when creating a new test.
             const mapQuestion = (q) => ({
                 id: q.id,
                 text: q.text,
@@ -615,92 +730,54 @@
                 qualitative: (test.questions.qualitative || []).map(mapQuestion),
             };
 
+            // Display the existing questions.
             for (const category of Object.keys(categories)) {
                 renderQuestions(category);
             }
 
+            // Fill in the existing test name.
+            if ($("testName")) {
+                $("testName").value = currentTestName;
+            }
+
+            // Load the grading guidelines into the existing guideline list.
             loadGuidelinesString(currentTestGuidelines);
 
-            const editView = $("editView");
-            if (editView) {
-                editView.replaceChildren();
-
-                const heading = document.createElement("h3");
-                heading.textContent = `Editing test: ${test.name || test.code}`;
-
-                const codeText = document.createElement("p");
-                codeText.textContent = `Test code: ${test.code}`;
-
-                const nameLabel = document.createElement("label");
-                nameLabel.htmlFor = "editTestName";
-                nameLabel.textContent = "Test name";
-
-                const nameInput = document.createElement("input");
-                nameInput.id = "editTestName";
-                nameInput.type = "text";
-                nameInput.maxLength = 255;
-                nameInput.value = currentTestName;
-                nameInput.placeholder = "Test name";
-
-                const guidelinesHeading = document.createElement("h4");
-                guidelinesHeading.textContent = "Grading guidelines";
-
-                const guidelinesInput = document.createElement("textarea");
-                guidelinesInput.id = "editTestGuidelines";
-                guidelinesInput.rows = 5;
-                guidelinesInput.maxLength = MAX_GUIDELINES_LENGTH;
-                guidelinesInput.value = currentTestGuidelines;
-                guidelinesInput.placeholder =
-                    "Enter the grading guidelines for this test...";
-
-                // ----- Timer controls -----
-                const timerLabel = document.createElement("label");
-                const timerCheckbox = document.createElement("input");
-                timerCheckbox.type = "checkbox";
-                timerCheckbox.id = "editTimerEnabled";
-                timerCheckbox.checked = Boolean(test.timerEnabled);
-                timerLabel.append(timerCheckbox, " Enable timer");
-
-                const timerMinutes = document.createElement("input");
-                timerMinutes.type = "number";
-                timerMinutes.id = "editTimeLimit";
-                timerMinutes.min = "1";
-                timerMinutes.max = "600";
-                timerMinutes.placeholder = "Time limit (minutes)";
-                timerMinutes.value = test.timeLimitMinutes || "";
-                timerMinutes.hidden = !timerCheckbox.checked;
-
-                timerCheckbox.addEventListener("change", () => {
-                    timerMinutes.hidden = !timerCheckbox.checked;
-                });
-
-                const save = makeButton("Save Test Details", "", async () => {
-                    await saveTestDetails();
-                });
-
-                const cancel = makeButton("Close Editor", "", () => {
-                    editView.replaceChildren();
-                    currentTestCode = null;
-                    editingTest = false;
-                    resetQuestions();
-                    resetGuidelines();
-                });
-
-                editView.append(
-                    heading,
-                    codeText,
-                    nameLabel,
-                    nameInput,
-                    guidelinesHeading,
-                    guidelinesInput,
-                    timerLabel,
-                    timerMinutes,
-                    save,
-                    cancel
-                );
-
-                editView.scrollIntoView({ behavior: "smooth", block: "start" });
+            // Fill in the existing timer settings.
+            if ($("timerEnabled")) {
+                $("timerEnabled").checked = Boolean(test.timerEnabled);
             }
+
+            if ($("timeLimit")) {
+                $("timeLimit").value = test.timeLimitMinutes || "";
+            }
+
+            if ($("timerSettings")) {
+                $("timerSettings").hidden = !test.timerEnabled;
+            }
+
+            // Change the heading and button to indicate edit mode.
+            if ($("createHeading")) {
+                $("createHeading").textContent = "Edit Existing Test";
+            }
+
+            if ($("createTest")) {
+                $("createTest").textContent = "Save Test Changes";
+            }
+
+            showMessage(
+                "createdTest",
+                `Editing test ${test.code}. Changes to existing questions save individually.`
+            );
+
+            // Show the SAME screen used to create a test.
+            showScreen("createScreen");
+
+            $("createScreen")?.scrollIntoView({
+                behavior: "smooth",
+                block: "start"
+            });
+
         } catch (error) {
             alert(`Could not open test: ${error.message}`);
         }
@@ -709,14 +786,13 @@
     async function saveTestDetails() {
         if (!currentTestCode) return;
 
-        const name = $("editTestName")?.value.trim() || "";
-        const guidelines = $("editTestGuidelines")?.value.trim() || "";
+        const name = $("testName")?.value.trim() || "";
+        const guidelines = getGuidelinesString();
 
-        const enabled = $("editTimerEnabled")?.checked || false;
-        const minutes = parseInt($("editTimeLimit")?.value, 10);
+        const timer = getTimerSettings();
 
-        if (enabled && (!Number.isInteger(minutes) || minutes < 1 || minutes > 600)) {
-            alert("Enter a time limit between 1 and 600 minutes.");
+        if (timer.error) {
+            alert(timer.error);
             return;
         }
 
@@ -726,16 +802,18 @@
                 body: JSON.stringify({
                     name,
                     grading_guidelines: guidelines,
-                    timer_enabled: enabled,
-                    time_limit_minutes: enabled ? minutes : null,
+                    timer_enabled: timer.timer_enabled,
+                    time_limit_minutes: timer.time_limit_minutes,
                 }),
             });
 
             currentTestName = name;
             currentTestGuidelines = guidelines;
 
-            showMessage("editView", "Test details saved.");
+            showMessage("createdTest", "Your test changes were saved successfully!");
+
             await loadTests();
+
         } catch (error) {
             alert(`Could not save test details: ${error.message}`);
         }
@@ -854,13 +932,6 @@
             $(config.button)?.addEventListener("click", () => {
                 addQuestion(category);
             });
-
-            $(config.input)?.addEventListener("keydown", (event) => {
-                if (event.key === "Enter") {
-                    event.preventDefault();
-                    addQuestion(category);
-                }
-            });
         }
 
         // Grading guideline buttons and input.
@@ -898,8 +969,35 @@
             await loadTests();
         });
 
-        $("createBackButton")?.addEventListener("click", () => {
-            showScreen("adminMenu");
+        $("createBackButton")?.addEventListener("click", async () => {
+            if (editingTest) {
+                // Leave edit mode and return to the list of tests.
+                editingTest = false;
+                currentTestCode = null;
+
+                if ($("createHeading")) {
+                    $("createHeading").textContent = "Create a New Test";
+                }
+
+                if ($("createTest")) {
+                    $("createTest").textContent = "Create Test";
+                }
+
+                resetQuestions();
+                resetGuidelines();
+                resetTimerInputs();
+
+                if ($("testName")) {
+                    $("testName").value = "";
+                }
+
+                showMessage("createdTest", "");
+
+                showScreen("testsScreen");
+                await loadTests();
+            } else {
+                showScreen("adminMenu");
+            }
         });
 
         $("testsBackButton")?.addEventListener("click", () => {
