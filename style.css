@@ -543,3 +543,54 @@ p2{
     max-width: 100%;
     margin: 5px auto;
 }
+/* ==========================================
+   STUDENT READING MATERIAL - FULL WIDTH
+========================================== */
+
+.reading-material-container {
+    width: 95%;
+    max-width: 1500px;
+    margin: 50px auto 40px auto;
+    padding: 30px;
+    background: white;
+    border-radius: 12px;
+    box-sizing: border-box;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
+}
+
+.reading-material-container h2 {
+    font-size: 28px;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.reading-material-container p {
+    font-size: 17px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+#reading-material-viewer {
+    display: block;
+    width: 100%;
+    height: 850px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background: #f5f5f5;
+}
+
+.reading-material-container[hidden] {
+    display: none !important;
+}
+
+@media (max-width: 768px) {
+    .reading-material-container {
+        width: 98%;
+        padding: 12px;
+        margin-top: 25px;
+    }
+
+    #reading-material-viewer {
+        height: 650px;
+    }
+}

@@ -95,6 +95,18 @@
             <input id="grading_guidelines" type="text" placeholder="Additional grading information or rules for AI?">
             <button id="guidelinesAdd" type="button">Add Instructions</button>
             <div id="guidelinesList"></div>
+            <!-- READING MATERIALS -->
+            <h3>Reading Materials</h3>
+            <p>Upload a PDF that students can read during this test.</p>
+
+            <label for="readingMaterial">Choose a PDF file:</label>
+            <input
+                type="file"
+                id="readingMaterial"
+                accept="application/pdf,.pdf"
+            >
+
+            <p id="readingMaterialStatus"></p>
             <h3>Timer</h3>
             <label>
                 <input type="checkbox" id="timerEnabled"> Enable timer

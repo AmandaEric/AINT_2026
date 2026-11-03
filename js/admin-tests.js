@@ -1,9 +1,11 @@
+
 /* ==========================================================
    AINT ADMIN TESTS
    - Add, display, and remove questions (with points and an optional image)
    - Add, display, and remove grading guidelines
    - Optional timer (enabled + minutes)
    - Create tests
+   - Upload and replace PDF reading materials
    - View existing tests
    - Edit test names, questions, grading guidelines, and timer
 
@@ -12,10 +14,9 @@
 
 (() => {
     "use strict";
-    const API = BACKEND_URL;   // defined in core.js
 
-    // Limits come from core.js so they are changed in one place.
-    // The fallback only matters if core.js is an older version.
+    const API = BACKEND_URL;
+
     const LIMITS = typeof AINT_LIMITS !== "undefined"
         ? AINT_LIMITS
         : {
@@ -63,8 +64,6 @@
         qualitative: [],
     };
 
-    // Guidelines are stored as an array in the browser
-    // and joined into one string when sent to server.js.
     let guidelineItems = [];
 
     let currentTestCode = null;
@@ -75,19 +74,29 @@
     const $ = (id) => document.getElementById(id);
 
     function getToken() {
-        // admin-login.js keeps the login token here
         return sessionStorage.getItem("adminToken") || "";
     }
 
+    /* ----------------------------------------------------------
+       API
+       ---------------------------------------------------------- */
+
     async function api(path, options = {}) {
         const token = getToken();
+
         if (!token) {
             throw new Error("You are not logged in. Please log in again.");
         }
 
+        // FormData must NOT receive an application/json header.
+        // The browser automatically adds the multipart boundary.
+        const isFormData = options.body instanceof FormData;
+
         const headers = {
-            ...(options.body ? { "Content-Type": "application/json" } : {}),
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(options.body && !isFormData
+                ? { "Content-Type": "application/json" }
+                : {}),
+            Authorization: `Bearer ${token}`,
             ...(options.headers || {}),
         };
 
@@ -95,6 +104,7 @@
             ...options,
             headers,
         });
+
         if (response.status === 401) {
             if (typeof logoutAdmin === "function") {
                 logoutAdmin(false);
@@ -108,18 +118,27 @@
         }
 
         let data;
+
         try {
             data = await response.json();
         } catch {
-            throw new Error(`Server returned an invalid response (${response.status}).`);
+            throw new Error(
+                `Server returned an invalid response (${response.status}).`
+            );
         }
 
         if (!response.ok || data.success === false) {
-            throw new Error(data.error || `Request failed (${response.status}).`);
+            throw new Error(
+                data.error || `Request failed (${response.status}).`
+            );
         }
 
         return data;
     }
+
+    /* ----------------------------------------------------------
+       MESSAGES AND BUTTONS
+       ---------------------------------------------------------- */
 
     function showMessage(id, message, isError = false) {
         const element = $(id);
@@ -131,17 +150,120 @@
 
     function makeButton(label, className, onClick) {
         const button = document.createElement("button");
+
         button.type = "button";
         button.textContent = label;
-        if (className) button.className = className;
+
+        if (className) {
+            button.className = className;
+        }
+
         button.addEventListener("click", onClick);
+
         return button;
     }
 
     /* ----------------------------------------------------------
+       PDF READING MATERIALS
+       ---------------------------------------------------------- */
+
+    async function uploadReadingMaterial(code, file) {
+        if (!file) return null;
+
+        if (file.type !== "application/pdf") {
+            throw new Error("Please choose a PDF file.");
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+            throw new Error("PDF must be 10 MB or smaller.");
+        }
+
+        const formData = new FormData();
+
+        // This must match pdfUpload.single("readingMaterial")
+        formData.append("readingMaterial", file);
+
+        return await api(
+            `/api/tests/${encodeURIComponent(code)}/reading-material`,
+            {
+                method: "POST",
+                body: formData,
+            }
+        );
+    }
+
+    async function checkReadingMaterial(code) {
+        try {
+            const data = await api(
+                `/api/tests/${encodeURIComponent(code)}/reading-material`
+            );
+
+            return data;
+        } catch (error) {
+            console.error("Could not check reading material:", error);
+            return {
+                exists: false,
+                fileName: "",
+            };
+        }
+    }
+
+    function resetReadingMaterialInput() {
+        const input = $("readingMaterial");
+
+        if (input) {
+            input.value = "";
+        }
+
+        showMessage("readingMaterialStatus", "");
+    }
+
+    async function uploadSelectedReadingMaterial(code) {
+        const input = $("readingMaterial");
+        const file = input?.files?.[0];
+
+        // No new PDF selected. Leave the existing PDF unchanged.
+        if (!file) {
+            return {
+                uploaded: false,
+                success: true,
+            };
+        }
+
+        showMessage("readingMaterialStatus", "Uploading PDF...");
+
+        try {
+            const result = await uploadReadingMaterial(code, file);
+
+            showMessage(
+                "readingMaterialStatus",
+                `PDF uploaded successfully: ${result.fileName || file.name}`
+            );
+
+            input.value = "";
+
+            return {
+                uploaded: true,
+                success: true,
+                fileName: result.fileName || file.name,
+            };
+        } catch (error) {
+            showMessage(
+                "readingMaterialStatus",
+                `PDF upload failed: ${error.message}`,
+                true
+            );
+
+            return {
+                uploaded: false,
+                success: false,
+                error: error.message,
+            };
+        }
+    }
+
+    /* ----------------------------------------------------------
        IMAGES
-       Resizes the chosen image in the browser and returns it as a
-       small JPEG data URL, so it can be sent as JSON.
        ---------------------------------------------------------- */
 
     function fileToDataUrl(file, maxSize = 800) {
@@ -152,26 +274,48 @@
             }
 
             const reader = new FileReader();
-            reader.onerror = () => reject(new Error("Could not read the image."));
+
+            reader.onerror = () => {
+                reject(new Error("Could not read the image."));
+            };
+
             reader.onload = () => {
                 const img = new Image();
-                img.onerror = () => reject(new Error("That file is not a valid image."));
+
+                img.onerror = () => {
+                    reject(new Error("That file is not a valid image."));
+                };
+
                 img.onload = () => {
-                    const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+                    const scale = Math.min(
+                        1,
+                        maxSize / Math.max(img.width, img.height)
+                    );
+
                     const canvas = document.createElement("canvas");
+
                     canvas.width = Math.round(img.width * scale);
                     canvas.height = Math.round(img.height * scale);
 
                     const ctx = canvas.getContext("2d");
-                    // White background so transparent PNGs don't turn black in a JPEG
+
                     ctx.fillStyle = "#ffffff";
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    ctx.drawImage(
+                        img,
+                        0,
+                        0,
+                        canvas.width,
+                        canvas.height
+                    );
 
                     resolve(canvas.toDataURL("image/jpeg", 0.8));
                 };
+
                 img.src = reader.result;
             };
+
             reader.readAsDataURL(file);
         });
     }
@@ -183,6 +327,7 @@
     function renderQuestions(category) {
         const config = categories[category];
         const list = $(config.list);
+
         if (!list) return;
 
         list.replaceChildren();
@@ -192,28 +337,28 @@
             item.className = "admin-list-item";
 
             const text = document.createElement("span");
+
             text.textContent =
                 `${index + 1}. ${question.text} (${question.points || DEFAULT_POINTS} pts)`;
 
             item.appendChild(text);
 
-            // Show the existing question image, if there is one.
             if (question.image) {
                 const thumb = document.createElement("img");
+
                 thumb.src = question.image;
                 thumb.alt = "Question image";
                 thumb.style.maxHeight = "48px";
                 thumb.style.marginLeft = "8px";
                 thumb.style.verticalAlign = "middle";
+
                 item.appendChild(thumb);
             }
 
-            // Edit button.
             const edit = makeButton("Edit", "edit-question", () => {
                 showQuestionEditor(category, question, index, item);
             });
 
-            // Remove button.
             const remove = makeButton("Remove", "remove-question", () => {
                 if (question.id && currentTestCode && editingTest) {
                     deleteSavedQuestion(category, question, item);
@@ -228,13 +373,13 @@
             list.appendChild(item);
         });
     }
+
     function showQuestionEditor(category, question, index, item) {
         item.replaceChildren();
 
         const editor = document.createElement("div");
         editor.className = "question-editor";
 
-        // Question text area.
         const questionLabel = document.createElement("label");
         questionLabel.textContent = "Question";
 
@@ -244,7 +389,6 @@
         questionInput.maxLength = MAX_QUESTION_LENGTH;
         questionInput.value = question.text;
 
-        // Points input.
         const pointsLabel = document.createElement("label");
         pointsLabel.textContent = "Points";
 
@@ -254,7 +398,6 @@
         pointsInput.max = String(MAX_POINTS);
         pointsInput.value = question.points || DEFAULT_POINTS;
 
-        // Save changes.
         const save = makeButton("Save Changes", "", async () => {
             const newText = questionInput.value.trim();
             const newPoints = Number(pointsInput.value);
@@ -266,13 +409,17 @@
             }
 
             if (newText.length > MAX_QUESTION_LENGTH) {
-                alert(`Questions can be at most ${MAX_QUESTION_LENGTH} characters.`);
+                alert(
+                    `Questions can be at most ${MAX_QUESTION_LENGTH} characters.`
+                );
                 return;
             }
 
-            if (!Number.isInteger(newPoints) ||
+            if (
+                !Number.isInteger(newPoints) ||
                 newPoints < 1 ||
-                newPoints > MAX_POINTS) {
+                newPoints > MAX_POINTS
+            ) {
                 alert(`Points must be between 1 and ${MAX_POINTS}.`);
                 pointsInput.focus();
                 return;
@@ -281,10 +428,9 @@
             const updatedQuestion = {
                 ...question,
                 text: newText,
-                points: newPoints
+                points: newPoints,
             };
 
-            // Saved question: update it on the server.
             if (question.id && currentTestCode && editingTest) {
                 try {
                     await api(
@@ -293,8 +439,8 @@
                             method: "PATCH",
                             body: JSON.stringify({
                                 text: newText,
-                                points: newPoints
-                            })
+                                points: newPoints,
+                            }),
                         }
                     );
 
@@ -307,12 +453,10 @@
                 return;
             }
 
-            // Question not saved yet: update it in browser memory.
             questions[category][index] = updatedQuestion;
             renderQuestions(category);
         });
 
-        // Cancel editing.
         const cancel = makeButton("Cancel", "", () => {
             renderQuestions(category);
         });
@@ -330,12 +474,16 @@
         questionInput.focus();
     }
 
-    // Clears the points and image inputs for one category
     function resetQuestionExtras(category) {
         const config = categories[category];
 
-        if ($(config.points)) $(config.points).value = DEFAULT_POINTS;
-        if ($(config.image)) $(config.image).value = "";
+        if ($(config.points)) {
+            $(config.points).value = DEFAULT_POINTS;
+        }
+
+        if ($(config.image)) {
+            $(config.image).value = "";
+        }
     }
 
     async function addQuestion(category) {
@@ -356,15 +504,14 @@
             return;
         }
 
-        // Points
-        const points = parseInt($(config.points)?.value, 10) || DEFAULT_POINTS;
+        const points =
+            parseInt($(config.points)?.value, 10) || DEFAULT_POINTS;
 
         if (points < 1 || points > MAX_POINTS) {
             alert(`Points must be between 1 and ${MAX_POINTS}.`);
             return;
         }
 
-        // Optional image
         const file = $(config.image)?.files[0];
         let image = null;
 
@@ -377,16 +524,19 @@
             }
         }
 
-        const question = { text, points, image };
+        const question = {
+            text,
+            points,
+            image,
+        };
 
-        // Editing a saved test: send straight to the server
         if (editingTest && currentTestCode) {
             await addSavedQuestion(category, question);
             return;
         }
 
-        // New test: keep it in memory until "Create Test"
         questions[category].push(question);
+
         input.value = "";
         resetQuestionExtras(category);
         renderQuestions(category);
@@ -409,7 +559,11 @@
             );
 
             const input = $(categories[category].input);
-            if (input) input.value = "";
+
+            if (input) {
+                input.value = "";
+            }
+
             resetQuestionExtras(category);
 
             await loadTestForEditing(currentTestCode);
@@ -424,7 +578,9 @@
         try {
             await api(
                 `/api/tests/${encodeURIComponent(currentTestCode)}/questions/${question.id}`,
-                { method: "DELETE" }
+                {
+                    method: "DELETE",
+                }
             );
 
             questions[category] = questions[category].filter(
@@ -446,7 +602,11 @@
 
         for (const category of Object.keys(categories)) {
             const input = $(categories[category].input);
-            if (input) input.value = "";
+
+            if (input) {
+                input.value = "";
+            }
+
             resetQuestionExtras(category);
             renderQuestions(category);
         }
@@ -454,19 +614,21 @@
 
     /* ----------------------------------------------------------
        GRADING GUIDELINES
-       This is the part that makes guidelinesList display items.
        ---------------------------------------------------------- */
 
     function renderGuidelines() {
         const list = $("guidelinesList");
-        if (!list) return;   // not on a page that has the guidelines list
+
+        if (!list) return;
 
         list.replaceChildren();
 
         if (guidelineItems.length === 0) {
             const empty = document.createElement("p");
+
             empty.className = "guidelines-empty";
             empty.textContent = "No additional instructions added yet.";
+
             list.appendChild(empty);
             return;
         }
@@ -490,8 +652,11 @@
 
     function addGuideline() {
         const input = $("grading_guidelines");
+
         if (!input) {
-            console.error('Could not find element with id="grading_guidelines".');
+            console.error(
+                'Could not find element with id="grading_guidelines".'
+            );
             return;
         }
 
@@ -503,7 +668,9 @@
         }
 
         if (text.length > MAX_GUIDELINES_LENGTH) {
-            alert(`Guidelines can be at most ${MAX_GUIDELINES_LENGTH} characters each.`);
+            alert(
+                `Guidelines can be at most ${MAX_GUIDELINES_LENGTH} characters each.`
+            );
             return;
         }
 
@@ -513,11 +680,14 @@
         );
 
         if (totalLength + text.length > MAX_GUIDELINES_LENGTH) {
-            alert(`The combined grading guidelines cannot exceed ${MAX_GUIDELINES_LENGTH} characters.`);
+            alert(
+                `The combined grading guidelines cannot exceed ${MAX_GUIDELINES_LENGTH} characters.`
+            );
             return;
         }
 
         guidelineItems.push(text);
+
         input.value = "";
         renderGuidelines();
         input.focus();
@@ -527,7 +697,10 @@
         guidelineItems = [];
 
         const input = $("grading_guidelines");
-        if (input) input.value = "";
+
+        if (input) {
+            input.value = "";
+        }
 
         renderGuidelines();
     }
@@ -539,7 +712,6 @@
     function loadGuidelinesString(value) {
         const text = String(value || "").trim();
 
-        // Existing tests may have guidelines stored as multiple lines.
         guidelineItems = text
             ? text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
             : [];
@@ -548,23 +720,34 @@
     }
 
     /* ----------------------------------------------------------
-       TIMER (optional)
+       TIMER
        ---------------------------------------------------------- */
 
     function resetTimerInputs() {
-        if ($("timerEnabled")) $("timerEnabled").checked = false;
-        if ($("timeLimit")) $("timeLimit").value = "";
-        if ($("timerSettings")) $("timerSettings").hidden = true;
+        if ($("timerEnabled")) {
+            $("timerEnabled").checked = false;
+        }
+
+        if ($("timeLimit")) {
+            $("timeLimit").value = "";
+        }
+
+        if ($("timerSettings")) {
+            $("timerSettings").hidden = true;
+        }
     }
 
-    // Reads the create-screen timer inputs.
-    // Returns { error } if invalid, otherwise the two fields for the server.
     function getTimerSettings() {
         const enabled = $("timerEnabled")?.checked || false;
         const minutes = parseInt($("timeLimit")?.value, 10);
 
-        if (enabled && (!Number.isInteger(minutes) || minutes < 1 || minutes > 600)) {
-            return { error: "Enter a time limit between 1 and 600 minutes." };
+        if (
+            enabled &&
+            (!Number.isInteger(minutes) || minutes < 1 || minutes > 600)
+        ) {
+            return {
+                error: "Enter a time limit between 1 and 600 minutes.",
+            };
         }
 
         return {
@@ -581,7 +764,13 @@
         const button = $("createTest");
         const name = $("testName")?.value.trim() || "";
 
-        // Each question is sent as an object: { text, points, image }
+        // When editing, save the test details and upload a replacement
+        // PDF only if a new PDF has been selected.
+        if (editingTest) {
+            await saveTestDetails();
+            return;
+        }
+
         const toPayload = (q) => ({
             text: q.text,
             points: q.points || DEFAULT_POINTS,
@@ -597,23 +786,22 @@
         const totalQuestions = Object.values(questionPayload)
             .reduce((total, group) => total + group.length, 0);
 
-        if (editingTest) {
-            await saveTestDetails();
-            return;
-        }
-
         if (totalQuestions === 0) {
             alert("Please add at least one question before creating the test.");
             return;
         }
 
         const timer = getTimerSettings();
+
         if (timer.error) {
             alert(timer.error);
             return;
         }
 
-        if (button) button.disabled = true;
+        if (button) {
+            button.disabled = true;
+        }
+
         showMessage("createdTest", "Creating test...");
 
         try {
@@ -628,12 +816,20 @@
                 }),
             });
 
+            // The test now exists. Upload its PDF separately.
+            const pdfResult = await uploadSelectedReadingMaterial(data.code);
+
             const output = $("createdTest");
+
             if (output) {
                 output.replaceChildren();
 
                 const message = document.createElement("p");
-                message.textContent = "Test created successfully! Test code: ";
+
+                message.textContent =
+                    pdfResult.success
+                        ? "Test created successfully! Test code: "
+                        : "Test created, but the PDF upload failed. Test code: ";
 
                 const code = document.createElement("strong");
                 code.textContent = data.code;
@@ -649,11 +845,29 @@
             resetGuidelines();
             resetTimerInputs();
 
-            if ($("testName")) $("testName").value = "";
+            if ($("testName")) {
+                $("testName").value = "";
+            }
+
+            // Only clear the PDF input if the upload succeeded or no file
+            // was selected. A failed upload remains selected for retry.
+            if (pdfResult.success) {
+                resetReadingMaterialInput();
+            }
+
+            if (!pdfResult.success) {
+                showMessage(
+                    "readingMaterialStatus",
+                    `The test was created with code ${data.code}, but the PDF could not be uploaded: ${pdfResult.error}`,
+                    true
+                );
+            }
         } catch (error) {
             showMessage("createdTest", error.message, true);
         } finally {
-            if (button) button.disabled = false;
+            if (button) {
+                button.disabled = false;
+            }
         }
     }
 
@@ -663,16 +877,19 @@
 
     async function loadTests() {
         const container = $("myTests");
+
         if (!container) return;
 
         container.textContent = "Loading tests...";
 
         try {
             const data = await api("/api/admin/tests");
+
             container.replaceChildren();
 
             if (!data.tests || data.tests.length === 0) {
-                container.textContent = "You haven't created any tests yet.";
+                container.textContent =
+                    "You haven't created any tests yet.";
                 return;
             }
 
@@ -684,25 +901,45 @@
                 heading.textContent = test.name || "Untitled test";
 
                 const details = document.createElement("p");
+
                 details.textContent =
                     `Code: ${test.code} | Questions: ${test.questionCount} | ` +
                     `Submissions: ${test.submitted}`;
 
-                const editButton = makeButton("Edit Test", "", async () => {
-                    await loadTestForEditing(test.code);
-                });
+                const editButton = makeButton(
+                    "Edit Test",
+                    "",
+                    async () => {
+                        await loadTestForEditing(test.code);
+                    }
+                );
 
-                const resultsButton = makeButton("View Results", "", async () => {
-                    await loadResults(test.code);
-                });
+                const resultsButton = makeButton(
+                    "View Results",
+                    "",
+                    async () => {
+                        await loadResults(test.code);
+                    }
+                );
 
-                card.append(heading, details, editButton, resultsButton);
+                card.append(
+                    heading,
+                    details,
+                    editButton,
+                    resultsButton
+                );
+
                 container.appendChild(card);
             });
         } catch (error) {
-            container.textContent = `Could not load tests: ${error.message}`;
+            container.textContent =
+                `Could not load tests: ${error.message}`;
         }
     }
+
+    /* ----------------------------------------------------------
+       EDIT EXISTING TEST
+       ---------------------------------------------------------- */
 
     async function loadTestForEditing(code) {
         try {
@@ -715,8 +952,6 @@
             currentTestGuidelines = test.gradingGuidelines || "";
             editingTest = true;
 
-            // Load the existing questions into the same question lists
-            // used when creating a new test.
             const mapQuestion = (q) => ({
                 id: q.id,
                 text: q.text,
@@ -730,20 +965,16 @@
                 qualitative: (test.questions.qualitative || []).map(mapQuestion),
             };
 
-            // Display the existing questions.
             for (const category of Object.keys(categories)) {
                 renderQuestions(category);
             }
 
-            // Fill in the existing test name.
             if ($("testName")) {
                 $("testName").value = currentTestName;
             }
 
-            // Load the grading guidelines into the existing guideline list.
             loadGuidelinesString(currentTestGuidelines);
 
-            // Fill in the existing timer settings.
             if ($("timerEnabled")) {
                 $("timerEnabled").checked = Boolean(test.timerEnabled);
             }
@@ -756,7 +987,24 @@
                 $("timerSettings").hidden = !test.timerEnabled;
             }
 
-            // Change the heading and button to indicate edit mode.
+            // Clear any previously selected PDF.
+            resetReadingMaterialInput();
+
+            // Check whether this test already has a PDF.
+            const material = await checkReadingMaterial(test.code);
+
+            if (material.exists) {
+                showMessage(
+                    "readingMaterialStatus",
+                    `Current PDF: ${material.fileName}. Choose another PDF to replace it.`
+                );
+            } else {
+                showMessage(
+                    "readingMaterialStatus",
+                    "No PDF is currently attached to this test."
+                );
+            }
+
             if ($("createHeading")) {
                 $("createHeading").textContent = "Edit Existing Test";
             }
@@ -770,14 +1018,12 @@
                 `Editing test ${test.code}. Changes to existing questions save individually.`
             );
 
-            // Show the SAME screen used to create a test.
             showScreen("createScreen");
 
             $("createScreen")?.scrollIntoView({
                 behavior: "smooth",
-                block: "start"
+                block: "start",
             });
-
         } catch (error) {
             alert(`Could not open test: ${error.message}`);
         }
@@ -796,31 +1042,64 @@
             return;
         }
 
+        const button = $("createTest");
+
+        if (button) {
+            button.disabled = true;
+        }
+
         try {
-            await api(`/api/tests/${encodeURIComponent(currentTestCode)}`, {
-                method: "PATCH",
-                body: JSON.stringify({
-                    name,
-                    grading_guidelines: guidelines,
-                    timer_enabled: timer.timer_enabled,
-                    time_limit_minutes: timer.time_limit_minutes,
-                }),
-            });
+            await api(
+                `/api/tests/${encodeURIComponent(currentTestCode)}`,
+                {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                        name,
+                        grading_guidelines: guidelines,
+                        timer_enabled: timer.timer_enabled,
+                        time_limit_minutes: timer.time_limit_minutes,
+                    }),
+                }
+            );
 
             currentTestName = name;
             currentTestGuidelines = guidelines;
 
-            showMessage("createdTest", "Your test changes were saved successfully!");
+            // Upload a new PDF if one was selected.
+            // If none was selected, the current PDF stays unchanged.
+            const pdfResult =
+                await uploadSelectedReadingMaterial(currentTestCode);
+
+            if (pdfResult.success) {
+                showMessage(
+                    "createdTest",
+                    "Your test changes were saved successfully!"
+                );
+            } else {
+                showMessage(
+                    "createdTest",
+                    `Test details were saved, but the PDF upload failed: ${pdfResult.error}`,
+                    true
+                );
+            }
 
             await loadTests();
-
         } catch (error) {
             alert(`Could not save test details: ${error.message}`);
+        } finally {
+            if (button) {
+                button.disabled = false;
+            }
         }
     }
 
+    /* ----------------------------------------------------------
+       RESULTS
+       ---------------------------------------------------------- */
+
     async function loadResults(code) {
         const container = $("resultsList");
+
         if (!container) return;
 
         container.textContent = "Loading results...";
@@ -834,11 +1113,13 @@
 
             const heading = document.createElement("h3");
             heading.textContent = `Results: ${data.name || data.code}`;
+
             container.appendChild(heading);
 
             if (!data.submissions.length) {
                 const empty = document.createElement("p");
                 empty.textContent = "No student submissions yet.";
+
                 container.appendChild(empty);
                 return;
             }
@@ -851,6 +1132,7 @@
                 title.textContent = submission.studentName;
 
                 const score = document.createElement("p");
+
                 score.textContent = submission.gradingFailed
                     ? "Grading failed; answers were saved."
                     : `Score: ${submission.percent}%`;
@@ -862,6 +1144,7 @@
 
                 (submission.questions || []).forEach((q, index) => {
                     const question = document.createElement("p");
+
                     question.textContent =
                         `${index + 1}. ${q.question || ""}` +
                         (q.score !== undefined
@@ -875,7 +1158,8 @@
                 container.appendChild(card);
             });
         } catch (error) {
-            container.textContent = `Could not load results: ${error.message}`;
+            container.textContent =
+                `Could not load results: ${error.message}`;
         }
     }
 
@@ -892,34 +1176,58 @@
 
         screens.forEach((id) => {
             const screen = $(id);
-            if (screen) screen.hidden = id !== screenId;
+
+            if (screen) {
+                screen.hidden = id !== screenId;
+            }
         });
     }
 
     function startNewTest() {
         currentTestCode = null;
+        currentTestName = "";
+        currentTestGuidelines = "";
         editingTest = false;
 
         resetQuestions();
         resetGuidelines();
         resetTimerInputs();
+        resetReadingMaterialInput();
 
-        if ($("testName")) $("testName").value = "";
+        if ($("testName")) {
+            $("testName").value = "";
+        }
+
+        if ($("createHeading")) {
+            $("createHeading").textContent = "Create a New Test";
+        }
+
+        if ($("createTest")) {
+            $("createTest").textContent = "Create Test";
+        }
+
         showMessage("createdTest", "");
 
         showScreen("createScreen");
     }
 
+    /* ----------------------------------------------------------
+       INITIALIZE
+       ---------------------------------------------------------- */
+
     function initialize() {
-        // This file is also loaded on the student page. Do nothing there.
         const onAdminPage =
-            $("createScreen") || $("testsScreen") || $("createTest") || $("myTests");
+            $("createScreen") ||
+            $("testsScreen") ||
+            $("createTest") ||
+            $("myTests");
 
         if (!onAdminPage) return;
 
-        // Keep the question boxes and points inputs in step with the limits
         for (const config of Object.values(categories)) {
-            if ($(config.input)) $(config.input).maxLength = MAX_QUESTION_LENGTH;
+            if ($(config.input)) {
+                $(config.input).maxLength = MAX_QUESTION_LENGTH;
+            }
 
             if ($(config.points)) {
                 $(config.points).min = 1;
@@ -934,7 +1242,7 @@
             });
         }
 
-        // Grading guideline buttons and input.
+        // Grading guidelines.
         $("guidelinesAdd")?.addEventListener("click", addGuideline);
 
         $("grading_guidelines")?.addEventListener("keydown", (event) => {
@@ -944,75 +1252,92 @@
             }
         });
 
-        // Timer checkbox shows/hides the minutes input.
+        // Timer.
         $("timerEnabled")?.addEventListener("change", (event) => {
             if ($("timerSettings")) {
                 $("timerSettings").hidden = !event.target.checked;
             }
         });
 
-        // Create test.
+        // Create or save test.
         $("createTest")?.addEventListener("click", createTest);
 
-        // Clear all questions and guidelines.
-        document.querySelector(".clearQuestion")?.addEventListener("click", () => {
-            if (!confirm("Clear all questions and grading guidelines?")) return;
-            resetQuestions();
-            resetGuidelines();
-        });
-
-        // Navigation.
-        $("menuCreateButton")?.addEventListener("click", startNewTest);
-
-        $("menuViewButton")?.addEventListener("click", async () => {
-            showScreen("testsScreen");
-            await loadTests();
-        });
-
-        $("createBackButton")?.addEventListener("click", async () => {
-            if (editingTest) {
-                // Leave edit mode and return to the list of tests.
-                editingTest = false;
-                currentTestCode = null;
-
-                if ($("createHeading")) {
-                    $("createHeading").textContent = "Create a New Test";
-                }
-
-                if ($("createTest")) {
-                    $("createTest").textContent = "Create Test";
+        // Clear questions and guidelines.
+        document.querySelector(".clearQuestion")?.addEventListener(
+            "click",
+            () => {
+                if (!confirm(
+                    "Clear all questions and grading guidelines?"
+                )) {
+                    return;
                 }
 
                 resetQuestions();
                 resetGuidelines();
-                resetTimerInputs();
+            }
+        );
 
-                if ($("testName")) {
-                    $("testName").value = "";
-                }
+        // Navigation.
+        $("menuCreateButton")?.addEventListener(
+            "click",
+            startNewTest
+        );
 
-                showMessage("createdTest", "");
-
+        $("menuViewButton")?.addEventListener(
+            "click",
+            async () => {
                 showScreen("testsScreen");
                 await loadTests();
-            } else {
-                showScreen("adminMenu");
             }
-        });
+        );
+
+        $("createBackButton")?.addEventListener(
+            "click",
+            async () => {
+                if (editingTest) {
+                    editingTest = false;
+                    currentTestCode = null;
+                    currentTestName = "";
+                    currentTestGuidelines = "";
+
+                    if ($("createHeading")) {
+                        $("createHeading").textContent =
+                            "Create a New Test";
+                    }
+
+                    if ($("createTest")) {
+                        $("createTest").textContent = "Create Test";
+                    }
+
+                    resetQuestions();
+                    resetGuidelines();
+                    resetTimerInputs();
+                    resetReadingMaterialInput();
+
+                    if ($("testName")) {
+                        $("testName").value = "";
+                    }
+
+                    showMessage("createdTest", "");
+
+                    showScreen("testsScreen");
+                    await loadTests();
+                } else {
+                    showScreen("adminMenu");
+                }
+            }
+        );
 
         $("testsBackButton")?.addEventListener("click", () => {
             showScreen("adminMenu");
         });
 
-        // Display the empty guidelines state immediately.
         renderGuidelines();
 
-        // On a stand-alone "My tests" page (no menu button), load the list now.
+        // Load tests on a stand-alone My Tests page.
         if ($("myTests") && !$("menuViewButton")) {
             loadTests();
         }
-
-        // Otherwise the initial screen is controlled by the admin login script.
     }
 
     if (document.readyState === "loading") {
@@ -1028,5 +1353,7 @@
         loadTests,
         loadTestForEditing,
         getGuidelinesString,
+        uploadReadingMaterial,
+        checkReadingMaterial,
     };
 })();

@@ -8,6 +8,7 @@ import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 import { Resend } from "resend";
+import multer from "multer";
 
 // ES modules don't have __dirname, so build it
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -44,7 +45,25 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
 });
+// ==========================================
+// PDF READING MATERIAL UPLOAD SETTINGS
+// ==========================================
 
+const pdfUpload = multer({
+    storage: multer.memoryStorage(),
+
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10 MB maximum
+    },
+
+    fileFilter: (req, file, callback) => {
+        if (file.mimetype !== "application/pdf") {
+            return callback(new Error("Only PDF files are allowed."));
+        }
+
+        callback(null, true);
+    }
+});
 const EMAIL_FROM_USER = process.env.EMAIL_USER || process.env.SMTP_USER;
 const EMAIL_PASSWORD = process.env.EMAIL_APP_PASSWORD || process.env.SMTP_PASS;
 
@@ -354,6 +373,165 @@ async function getOwnedTest(code, adminId) {
     );
     return rows[0] ?? null;
 }
+// ==========================================
+// TEST READING MATERIAL PDF ROUTES
+// ==========================================
+
+// Handle Multer errors without treating them as server errors.
+function handlePdfUpload(req, res, next) {
+    pdfUpload.single("readingMaterial")(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({
+                success: false,
+                error: err.code === "LIMIT_FILE_SIZE"
+                    ? "PDF must be 10 MB or smaller."
+                    : err.message
+            });
+        }
+
+        next();
+    });
+}
+
+
+// ADMIN: Upload or replace a test's PDF.
+app.post(
+    "/api/tests/:code/reading-material",
+    requireAdmin,
+    handlePdfUpload,
+    async (req, res, next) => {
+        try {
+            const test = await getOwnedTest(
+                req.params.code,
+                req.admin.Admin_id
+            );
+
+            if (!test) {
+                return res.status(404).json({
+                    success: false,
+                    error: "Test not found."
+                });
+            }
+
+            if (!req.file) {
+                return badRequest(res, "Please choose a PDF file.");
+            }
+
+            // Check the actual file signature, not just its extension or MIME type.
+            if (
+                req.file.buffer.length < 5 ||
+                req.file.buffer.subarray(0, 5).toString() !== "%PDF-"
+            ) {
+                return badRequest(res, "The selected file is not a valid PDF.");
+            }
+
+            const fileName = path.basename(req.file.originalname).slice(0, 255);
+
+            await pool.execute(
+                `INSERT INTO Test_Reading_Materials
+                    (test_code, file_name, mime_type, file_data)
+                 VALUES (?, ?, 'application/pdf', ?)
+                 ON DUPLICATE KEY UPDATE
+                    file_name = VALUES(file_name),
+                    mime_type = VALUES(mime_type),
+                    file_data = VALUES(file_data),
+                    updated_at = CURRENT_TIMESTAMP`,
+                [test.test_code, fileName, req.file.buffer]
+            );
+
+            res.json({
+                success: true,
+                message: "Reading material uploaded successfully.",
+                fileName
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+
+// ADMIN: Check whether a test already has a PDF.
+app.get(
+    "/api/tests/:code/reading-material",
+    requireAdmin,
+    async (req, res, next) => {
+        try {
+            const test = await getOwnedTest(
+                req.params.code,
+                req.admin.Admin_id
+            );
+
+            if (!test) {
+                return res.status(404).json({
+                    success: false,
+                    error: "Test not found."
+                });
+            }
+
+            const [rows] = await pool.execute(
+                `SELECT file_name
+                   FROM Test_Reading_Materials
+                  WHERE test_code = ?`,
+                [test.test_code]
+            );
+
+            res.json({
+                success: true,
+                exists: rows.length > 0,
+                fileName: rows[0]?.file_name || ""
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+
+// STUDENT: View the PDF in the browser.
+app.get(
+    "/api/tests/:code/reading-material/view",
+    async (req, res, next) => {
+        try {
+            const code = String(req.params.code).toUpperCase();
+
+            // Only return material for an existing test.
+            const [tests] = await pool.execute(
+                `SELECT id FROM tests WHERE test_code = ?`,
+                [code]
+            );
+
+            if (!tests.length) {
+                return res.status(404).send("Test not found.");
+            }
+
+            const [rows] = await pool.execute(
+                `SELECT file_name, file_data
+                   FROM Test_Reading_Materials
+                  WHERE test_code = ?`,
+                [code]
+            );
+
+            if (!rows.length) {
+                return res.status(404).send("No reading material is available.");
+            }
+
+            const safeName = rows[0].file_name.replace(/["\\]/g, "_");
+
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader(
+                "Content-Disposition",
+                `inline; filename="${safeName}"`
+            );
+            res.setHeader("X-Content-Type-Options", "nosniff");
+            res.setHeader("Cache-Control", "no-store");
+
+            res.send(rows[0].file_data);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
 
 app.post("/api/tests", requireAdmin, async (req, res, next) => {
     try {
@@ -733,9 +911,16 @@ app.get("/api/tests/:code/results", requireAdmin, async (req, res, next) => {
 app.post("/api/tests/:code/start", rateLimit(20, 60 * 1000), async (req, res, next) => {
     try {
         const [tests] = await pool.execute(
-            `SELECT id, grading_guidelines
-             FROM tests
-             WHERE test_code = ?`,
+            `SELECT
+                t.id,
+                t.grading_guidelines,
+                EXISTS (
+                    SELECT 1
+                    FROM Test_Reading_Materials rm
+                    WHERE rm.test_code = t.test_code
+                ) AS has_reading_material
+            FROM tests t
+            WHERE t.test_code = ?`,
             [String(req.params.code).toUpperCase()]
         );
 
@@ -776,7 +961,8 @@ app.post("/api/tests/:code/start", rateLimit(20, 60 * 1000), async (req, res, ne
         res.json({
             success: true,
             questions: grouped,
-            grading_guidelines: tests[0].grading_guidelines || ""
+            grading_guidelines: tests[0].grading_guidelines || "",
+            hasReadingMaterial: Boolean(tests[0].has_reading_material)
         });
 
     } catch (err) {

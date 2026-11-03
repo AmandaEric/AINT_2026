@@ -18,6 +18,60 @@ const replayButton = document.getElementById("replayButton");
 
 let lastSpokenText = "";
 let followUpNeedsAnswer = false;
+// ==========================================
+// STUDENT: READING MATERIAL PDF
+// ==========================================
+
+let readingMaterialUrl = null;
+
+async function loadReadingMaterial(testCode) {
+    const container = document.getElementById("reading-material-container");
+    const viewer = document.getElementById("reading-material-viewer");
+
+    if (!container || !viewer) {
+        console.warn("Reading material viewer elements were not found.");
+        return;
+    }
+
+    // Hide the viewer while checking for a document.
+    container.hidden = true;
+    viewer.removeAttribute("src");
+
+    // Clean up any previously loaded PDF.
+    if (readingMaterialUrl) {
+        URL.revokeObjectURL(readingMaterialUrl);
+        readingMaterialUrl = null;
+    }
+
+    try {
+        const response = await fetch(
+            `${BACKEND_URL}/api/tests/${encodeURIComponent(testCode)}/reading-material/view`
+        );
+
+        // A 404 means this test does not have a PDF.
+        if (response.status === 404) {
+            console.log("This test does not have reading material.");
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(`PDF request failed: ${response.status}`);
+        }
+
+        const pdfBlob = await response.blob();
+
+        readingMaterialUrl = URL.createObjectURL(pdfBlob);
+
+        viewer.src = readingMaterialUrl;
+        container.hidden = false;
+
+        console.log("Reading material loaded successfully.");
+
+    } catch (error) {
+        console.error("READING MATERIAL ERROR:", error);
+        container.hidden = true;
+    }
+}
 
 function setReplayEnabled(enabled) {
     if (replayButton) {
@@ -152,17 +206,24 @@ function stopTimer() {
 // ==========================================
 
 function saveUnsentAnswer() {
-    if (!exam.current || !el.responseBox || !el.questionText) {
+    if (!exam.current || !el.responseBox) {
+        return;
+    }
+
+    // A follow-up answer must be saved by handleFollowUpAnswer().
+    // Never save it as though it were the original question's answer.
+    if (followUpNeedsAnswer) {
         return;
     }
 
     const answer = el.responseBox.value.trim();
 
-    if (answer === "" || answer === exam.lastRecordedAnswer) {
+    if (!answer || answer === exam.lastRecordedAnswer) {
         return;
     }
 
-    recordAnswer(el.questionText.textContent, answer);
+    // Always associate this answer with the original exam question.
+    recordAnswer(exam.current.question, answer);
     exam.lastRecordedAnswer = answer;
 }
 
@@ -172,6 +233,10 @@ function saveUnsentAnswer() {
 
 async function finishExam(timeUp = false) {
     if (exam.submitted || exam.finishing) {
+        return;
+    }
+    if (followUpNeedsAnswer && !timeUp) {
+        alert("Please answer the follow-up question before submitting.");
         return;
     }
 
@@ -232,6 +297,8 @@ bindEvent(el.startButton, "click", async () => {
             exam.testCode = code;
             exam.testQuestions = data.questions;
             exam.gradingGuidelines = data.grading_guidelines || "";
+            // Load the PDF associated with this test, if one exists.
+            await loadReadingMaterial(code);
 
             const limitSeconds = Number(data.timeLimitMinutes) * 60;
             exam.timerEnabled =
@@ -467,24 +534,35 @@ function addEvaluationLine(tag, text, label) {
     }
 }
 
+
 async function handleEvaluate() {
+    if (!exam.current || followUpNeedsAnswer) {
+        return;
+    }
+
     const answer = el.responseBox ? el.responseBox.value.trim() : "";
 
-    if (answer === "") {
+    if (!answer) {
         if (el.evaluationBox) {
-            el.evaluationBox.innerHTML = "<p>Please provide an answer before evaluating.</p>";
+            el.evaluationBox.innerHTML =
+                "<p>Please provide an answer before evaluating.</p>";
         }
         return;
     }
 
-    const questionTextEl = el.questionText || document.getElementById("questionText");
-    const originalQuestion = questionTextEl ? questionTextEl.textContent : "";
+    const originalQuestion = exam.current.question;
 
+    // Save the original answer.
     recordAnswer(originalQuestion, answer);
     exam.lastRecordedAnswer = answer;
 
-    if (el.evaluationBox) el.evaluationBox.innerHTML = "<p>AI is thinking...</p>";
-    if (el.evaluateButton) el.evaluateButton.disabled = true;
+    if (el.evaluationBox) {
+        el.evaluationBox.innerHTML = "<p>AI is thinking...</p>";
+    }
+
+    if (el.evaluateButton) {
+        el.evaluateButton.disabled = true;
+    }
 
     try {
         const response = await fetch(
@@ -493,75 +571,163 @@ async function handleEvaluate() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    originalQuestion: originalQuestion,
+                    originalQuestion,
                     studentResponse: answer,
-                    category: exam.current ? exam.current.category : "",
-                    points: exam.current ? exam.current.points : 10,
+                    category: exam.current.category,
+                    points: exam.current.points,
                     testCode: exam.testCode
                 })
             }
         );
 
         if (!response.ok) {
-            let detail = "";
-            try {
-                const body = await response.json();
-                detail = body.details || body.error || "";
-            } catch {}
-            throw new Error(`Server responded with ${response.status}${detail ? ": " + detail : ""}`);
+            throw new Error(`Server responded with ${response.status}`);
         }
 
         const data = await response.json();
 
-        const feedback = data.evaluation || data.feedback || "";
-        const hasFollowUp = Boolean(data.needsFollowUp && data.followUpQuestion);
+        const feedback = data.evaluation || "";
+        const hasFollowUp =
+            Boolean(data.needsFollowUp && data.followUpQuestion);
 
-        if (el.evaluationBox) el.evaluationBox.innerHTML = "";
+        if (el.evaluationBox) {
+            el.evaluationBox.innerHTML = "";
+        }
 
-        addEvaluationLine("h4", hasFollowUp ? "Follow-up Question" : "AI Evaluation");
+        addEvaluationLine(
+            "h4",
+            hasFollowUp ? "Follow-up Question" : "AI Evaluation"
+        );
 
-        if (feedback) addEvaluationLine("p", feedback);
+        if (feedback) {
+            addEvaluationLine("p", feedback);
+        }
 
         if (data.score !== undefined && data.score !== null) {
-            const scoreText = data.maxPoints
-                ? `${data.score} / ${data.maxPoints}`
-                : String(data.score);
-            addEvaluationLine("p", scoreText, "Score:");
+            addEvaluationLine(
+                "p",
+                `${data.score} / ${data.maxPoints}`,
+                "Preliminary Score:"
+            );
         }
 
         if (hasFollowUp) {
             followUpNeedsAnswer = true;
-            setQuestionButtonsEnabled(state.testRunning);
+            setQuestionButtonsEnabled(false);
 
-            addEvaluationLine("p", data.followUpQuestion, "Follow-up:");
+            // Remember that the next answer belongs to this follow-up.
+            exam.current.pendingFollowUp = data.followUpQuestion;
 
-            if (questionTextEl) questionTextEl.textContent = data.followUpQuestion;
+            addEvaluationLine(
+                "p",
+                data.followUpQuestion,
+                "Follow-up:"
+            );
+
+            if (el.questionText) {
+                el.questionText.textContent = data.followUpQuestion;
+            }
+
             clearResponseBox();
 
-            // The question's image stays on screen for its follow-up.
+            if (el.responseBox) {
+                el.responseBox.disabled = false;
+            }
 
-            if (el.responseBox) el.responseBox.disabled = false;
-            if (el.listenButton) el.listenButton.disabled = false;
+            if (el.listenButton) {
+                el.listenButton.disabled = false;
+            }
+
+            if (el.evaluateButton) {
+                el.evaluateButton.disabled = false;
+            }
 
             safeSpeak(data.followUpQuestion);
+
         } else {
             followUpNeedsAnswer = false;
+            exam.current.pendingFollowUp = null;
+
             setQuestionButtonsEnabled(state.testRunning);
 
-            addEvaluationLine("p", "No follow-up question is needed.");
+            addEvaluationLine(
+                "p",
+                "No follow-up question is needed."
+            );
         }
 
     } catch (error) {
         console.error("AI ERROR:", error);
+
         if (el.evaluationBox) {
             el.evaluationBox.innerHTML = `
                 <h4>AI Connection Error</h4>
-                <p>The AI is temporarily unavailable. Please try again in a moment.</p>
+                <p>The AI could not evaluate your answer.
+                Please try again.</p>
             `;
         }
+
+    } finally {
+        if (el.evaluateButton) {
+            el.evaluateButton.disabled = false;
+        }
+    }
+}
+function handleFollowUpAnswer() {
+    if (!exam.current || !followUpNeedsAnswer) {
+        return;
     }
 
-    if (el.evaluateButton) el.evaluateButton.disabled = false;
-}
+    const answer = el.responseBox
+        ? el.responseBox.value.trim()
+        : "";
 
-bindEvent(el.evaluateButton, "click", handleEvaluate);
+    if (!answer) {
+        if (el.evaluationBox) {
+            el.evaluationBox.innerHTML +=
+                "<p>Please answer the follow-up question.</p>";
+        }
+        return;
+    }
+
+    const followUpQuestion = exam.current.pendingFollowUp;
+
+    if (!followUpQuestion) {
+        console.error("Missing follow-up question.");
+        return;
+    }
+
+    // Save the answer with the follow-up question, not the original.
+    recordAnswer(followUpQuestion, answer);
+
+    exam.current.pendingFollowUp = null;
+    followUpNeedsAnswer = false;
+    exam.lastRecordedAnswer = null;
+
+    // Restore the original question on the screen.
+    if (el.questionText) {
+        el.questionText.textContent = exam.current.question;
+    }
+
+    clearResponseBox();
+
+    if (el.evaluationBox) {
+        el.evaluationBox.innerHTML +=
+            "<p>Follow-up answer saved!</p>" +
+            "<p>You may continue to the next question.</p>";
+    }
+
+    setQuestionButtonsEnabled(state.testRunning);
+
+    if (el.evaluateButton) {
+        el.evaluateButton.disabled = false;
+    }
+}
+bindEvent(el.evaluateButton, "click", () => {
+    if (followUpNeedsAnswer) {
+        handleFollowUpAnswer();
+    } else {
+        handleEvaluate();
+    }
+});
+
