@@ -133,6 +133,38 @@
                     placeholder="Maximum attempts"
                 >
             </div>
+            <!-- APPROVED WEBSITES -->
+            <h3>Approved Websites</h3>
+
+            <p>
+                Choose which websites students are allowed to visit while taking this test.
+                Leave this section empty if students are not restricted to specific websites.
+            </p>
+
+            <div id="allowedTabsSection">
+                <label for="allowedTabUrl">Website URL or domain:</label>
+
+                <input
+                    type="text"
+                    id="allowedTabUrl"
+                    placeholder="example.com or https://example.com/page"
+                >
+
+                <label for="allowedTabMatchType">Matching rule:</label>
+
+                <select id="allowedTabMatchType">
+                    <option value="DOMAIN">Allow the entire domain</option>
+                    <option value="EXACT">Allow only this exact URL</option>
+                </select>
+
+                <button id="addAllowedTabButton" type="button">
+                    Add Approved Website
+                </button>
+
+                <div id="allowedTabsList">
+                    <p>No approved websites added.</p>
+                </div>
+            </div>
                 
 
 

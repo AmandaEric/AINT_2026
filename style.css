@@ -319,12 +319,12 @@ button:active {
     object-fit: contain;
 }
 
-.avatar-container.has-question-image #ai-avatar {
+/* .avatar-container.has-question-image #ai-avatar {
     position: absolute;
     right: 8px;
     bottom: 8px;
     width: 28%;
-}
+} */
 
 /* ADMIN SPECIFIC */
 #adminLogin {

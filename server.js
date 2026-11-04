@@ -366,6 +366,131 @@ function cleanMaxAttempts(value) {
 
     return attempts;
 }
+// ==========================================
+// APPROVED WEBSITE HELPERS
+// ==========================================
+
+// Clean and validate the websites an admin approves.
+function cleanAllowedTabs(value) {
+    if (value === undefined || value === null) return [];
+
+    if (!Array.isArray(value)) {
+        throw new Error("Approved websites must be a list.");
+    }
+
+    if (value.length > 50) {
+        throw new Error("You can add up to 50 approved websites.");
+    }
+
+    const cleaned = [];
+
+    for (const item of value) {
+        const matchType = String(item.match_type || "DOMAIN").toUpperCase();
+
+        if (!["DOMAIN", "EXACT"].includes(matchType)) {
+            throw new Error("Invalid website matching rule.");
+        }
+
+        let input = String(item.allowed_url || "").trim();
+
+        if (!input || input.length > 500) {
+            throw new Error("Each approved website must be between 1 and 500 characters.");
+        }
+
+        // A domain can be entered as example.com.
+        // Exact matching requires a complete URL.
+        if (matchType === "DOMAIN" && !input.includes("://")) {
+            input = `https://${input}`;
+        }
+
+        let parsed;
+
+        try {
+            parsed = new URL(input);
+        } catch {
+            throw new Error(`Invalid website address: ${input}`);
+        }
+
+        if (
+            !["http:", "https:"].includes(parsed.protocol) ||
+            !parsed.hostname ||
+            parsed.username ||
+            parsed.password
+        ) {
+            throw new Error(`Invalid website address: ${input}`);
+        }
+
+        let allowedUrl;
+
+        if (matchType === "DOMAIN") {
+            allowedUrl = parsed.hostname.toLowerCase();
+        } else {
+            if (!/^https?:\/\//i.test(String(item.allowed_url).trim())) {
+                throw new Error("Exact URL matching requires a complete URL beginning with http:// or https://.");
+            }
+
+            // Ignore URL fragments because they do not identify a different page.
+            parsed.hash = "";
+            allowedUrl = parsed.href;
+        }
+
+        const duplicate = cleaned.some(
+            (entry) =>
+                entry.allowed_url === allowedUrl &&
+                entry.match_type === matchType
+        );
+
+        if (!duplicate) {
+            cleaned.push({
+                allowed_url: allowedUrl,
+                match_type: matchType
+            });
+        }
+    }
+
+    return cleaned;
+}
+
+
+// Determine whether a visited URL matches an approved website.
+function isAllowedExamUrl(visitedUrl, allowedTabs) {
+    let visited;
+
+    try {
+        visited = new URL(visitedUrl);
+    } catch {
+        return false;
+    }
+
+    if (!["http:", "https:"].includes(visited.protocol)) {
+        return false;
+    }
+
+    return allowedTabs.some((rule) => {
+        if (rule.match_type === "DOMAIN") {
+            const approvedDomain = String(rule.allowed_url).toLowerCase();
+            const visitedDomain = visited.hostname.toLowerCase();
+
+            // example.com also permits subdomains such as www.example.com.
+            return (
+                visitedDomain === approvedDomain ||
+                visitedDomain.endsWith(`.${approvedDomain}`)
+            );
+        }
+
+        try {
+            const approved = new URL(rule.allowed_url);
+
+            // Compare the full URL without its fragment.
+            visited.hash = "";
+
+            return visited.href === approved.href;
+        } catch {
+            return false;
+        }
+    });
+}
+
 
 // Collapses extra spaces so "Jane  Doe " and "Jane Doe" count as the same
 // student. MySQL's default collation ignores upper/lower case in the lookup.
@@ -392,6 +517,116 @@ async function getOwnedTest(code, adminId) {
     );
     return rows[0] ?? null;
 }
+// ==========================================
+// ADMIN: APPROVED WEBSITES
+// ==========================================
+
+// Retrieve approved websites while editing a test.
+app.get(
+    "/api/tests/:code/allowed-tabs",
+    requireAdmin,
+    async (req, res, next) => {
+        try {
+            const test = await getOwnedTest(
+                req.params.code,
+                req.admin.Admin_id
+            );
+
+            if (!test) {
+                return res.status(404).json({
+                    success: false,
+                    error: "Test not found."
+                });
+            }
+
+            const [rows] = await pool.execute(
+                `SELECT allowed_url, match_type
+                   FROM Allowed_Tabs
+                  WHERE test_id = ?
+                  ORDER BY id`,
+                [test.id]
+            );
+
+            res.json({
+                success: true,
+                allowedTabs: rows
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+
+// Replace the approved website list for a test.
+app.put(
+    "/api/tests/:code/allowed-tabs",
+    requireAdmin,
+    async (req, res, next) => {
+        try {
+            const test = await getOwnedTest(
+                req.params.code,
+                req.admin.Admin_id
+            );
+
+            if (!test) {
+                return res.status(404).json({
+                    success: false,
+                    error: "Test not found."
+                });
+            }
+
+            let allowedTabs;
+
+            try {
+                allowedTabs = cleanAllowedTabs(req.body.allowedTabs);
+            } catch (err) {
+                return badRequest(res, err.message);
+            }
+
+            const conn = await pool.getConnection();
+
+            try {
+                await conn.beginTransaction();
+
+                await conn.execute(
+                    `DELETE FROM Allowed_Tabs WHERE test_id = ?`,
+                    [test.id]
+                );
+
+                if (allowedTabs.length > 0) {
+                    await conn.query(
+                        `INSERT INTO Allowed_Tabs
+                            (test_id, allowed_url, match_type)
+                         VALUES ?`,
+                        [
+                            allowedTabs.map((tab) => [
+                                test.id,
+                                tab.allowed_url,
+                                tab.match_type
+                            ])
+                        ]
+                    );
+                }
+
+                await conn.commit();
+
+                res.json({
+                    success: true,
+                    message: "Approved websites saved.",
+                    allowedTabs
+                });
+            } catch (err) {
+                await conn.rollback();
+                throw err;
+            } finally {
+                conn.release();
+            }
+        } catch (err) {
+            next(err);
+        }
+    }
+);
 // ==========================================
 // TEST READING MATERIAL PDF ROUTES
 // ==========================================
@@ -939,7 +1174,29 @@ app.get("/api/tests/:code/results", requireAdmin, async (req, res, next) => {
             };
         });
 
-        res.json({ success: true, name: test.test_name || "", code: test.test_code, submissions });
+        const [proctoringEvents] = await pool.execute(
+            `SELECT
+                pe.id,
+                pe.event_type,
+                pe.details,
+                pe.event_timestamp,
+                pe.attempt_id,
+                ea.student_name
+             FROM Proctoring_Events pe
+             LEFT JOIN Exam_Attempts ea
+                ON ea.attempt_id = pe.attempt_id
+             WHERE pe.exam_code = ?
+             ORDER BY pe.id DESC`,
+            [test.test_code]
+        );
+        
+        res.json({
+            success: true,
+            name: test.test_name || "",
+            code: test.test_code,
+            submissions,
+            proctoringEvents
+        });
     } catch (err) {
         next(err);
     }
@@ -1038,6 +1295,14 @@ app.post("/api/tests/:code/start", rateLimit(20, 60 * 1000), async (req, res, ne
               ORDER BY Question_id`,
             [test.id]
         );
+        // Retrieve the approved websites for this test.
+        const [allowedTabs] = await conn.execute(
+            `SELECT allowed_url, match_type
+            FROM Allowed_Tabs
+            WHERE test_id = ?
+            ORDER BY id`,
+            [test.id]
+        );
 
         await conn.commit();
 
@@ -1065,7 +1330,8 @@ app.post("/api/tests/:code/start", rateLimit(20, 60 * 1000), async (req, res, ne
             hasReadingMaterial: Boolean(test.has_reading_material),
             attemptId,
             attemptNumber: attemptId ? attemptsUsed + 1 : null,
-            maxAttempts
+            maxAttempts,
+            allowedTabs
         });
     } catch (err) {
         if (conn) await conn.rollback().catch(() => {});
@@ -1408,63 +1674,150 @@ app.post(
                 .trim()
                 .toUpperCase();
 
-            const eventType = String(req.body.type || "");
-            const details = String(req.body.details || "").slice(0, 1000);
+            const eventType = String(req.body.type || "").trim();
+
+            const details = String(req.body.details || "").slice(0, 800);
+            const visitedUrl = String(req.body.url || "").slice(0, 1000);
+
+            const attemptId = Number(req.body.attemptId);
             const timestamp = new Date(req.body.timestamp);
 
             const allowedTypes = [
                 "TAB_HIDDEN",
                 "TAB_VISIBLE",
-                "FULLSCREEN_EXIT"
+                "WINDOW_BLUR",
+                "WINDOW_FOCUS",
+                "FULLSCREEN_EXIT",
+                "UNAUTHORIZED_TAB_OPENED",
+                "UNAUTHORIZED_TAB_SWITCHED",
+                "UNAUTHORIZED_WEBSITE_ACTIVE"
             ];
 
             if (!allowedTypes.includes(eventType)) {
-                return res.status(400).json({
-                    success: false,
-                    error: "Invalid proctoring event type."
-                });
+                return badRequest(res, "Invalid proctoring event type.");
             }
 
             if (
                 !req.body.timestamp ||
                 Number.isNaN(timestamp.getTime())
             ) {
-                return res.status(400).json({
-                    success: false,
-                    error: "A valid event timestamp is required."
-                });
+                return badRequest(res, "A valid event timestamp is required.");
             }
 
-            // Confirm that this exam code exists.
+            const isWebsiteViolation = [
+                "UNAUTHORIZED_TAB_OPENED",
+                "UNAUTHORIZED_TAB_SWITCHED",
+                "UNAUTHORIZED_WEBSITE_ACTIVE"
+            ].includes(eventType);
+
+            if (isWebsiteViolation && !visitedUrl) {
+                return badRequest(
+                    res,
+                    "A website URL is required for this event."
+                );
+            }
+
+            // Find the exam.
             const [tests] = await pool.execute(
-                "SELECT id FROM tests WHERE test_code = ?",
+                `SELECT id
+                   FROM tests
+                  WHERE test_code = ?`,
                 [examCode]
             );
 
-            if (tests.length === 0) {
+            if (!tests.length) {
                 return res.status(404).json({
                     success: false,
                     error: "Exam not found."
                 });
             }
 
-            // Store the event time in UTC in MySQL DATETIME format.
+            // Website violations must belong to a real, active attempt.
+            // Other existing proctoring events may still be recorded
+            // without an attempt ID for compatibility.
+            let validAttemptId = null;
+
+            if (
+                Number.isInteger(attemptId) &&
+                attemptId > 0
+            ) {
+                const [attempts] = await pool.execute(
+                    `SELECT attempt_id
+                       FROM Exam_Attempts
+                      WHERE attempt_id = ?
+                        AND test_code = ?
+                        AND status = 'IN_PROGRESS'`,
+                    [attemptId, examCode]
+                );
+
+                if (!attempts.length) {
+                    return res.status(403).json({
+                        success: false,
+                        error: "This exam attempt is not active."
+                    });
+                }
+
+                validAttemptId = attemptId;
+            } else if (isWebsiteViolation) {
+                return badRequest(
+                    res,
+                    "A valid exam attempt ID is required."
+                );
+            }
+
+            // The server checks the saved rules itself.
+            // It does not blindly trust the extension's violation report.
+            if (isWebsiteViolation) {
+                const [allowedTabs] = await pool.execute(
+                    `SELECT allowed_url, match_type
+                       FROM Allowed_Tabs
+                      WHERE test_id = ?`,
+                    [tests[0].id]
+                );
+
+                if (isAllowedExamUrl(visitedUrl, allowedTabs)) {
+                    return res.json({
+                        success: true,
+                        ignored: true,
+                        message: "This website is approved for the exam."
+                    });
+                }
+            }
+
             const eventTimestamp = timestamp
                 .toISOString()
                 .slice(0, 23)
                 .replace("T", " ");
 
+            const savedDetails = [
+                details,
+                visitedUrl ? `URL: ${visitedUrl}` : ""
+            ].filter(Boolean).join(" | ").slice(0, 1000);
+
             await pool.execute(
                 `INSERT INTO Proctoring_Events
-                    (exam_code, event_type, details, event_timestamp)
-                 VALUES (?, ?, ?, ?)`,
-                [examCode, eventType, details, eventTimestamp]
+                    (
+                        exam_code,
+                        event_type,
+                        details,
+                        event_timestamp,
+                        attempt_id
+                    )
+                 VALUES (?, ?, ?, ?, ?)`,
+                [
+                    examCode,
+                    eventType,
+                    savedDetails,
+                    eventTimestamp,
+                    validAttemptId
+                ]
             );
 
             res.status(201).json({
                 success: true,
                 message: "Proctoring event saved."
             });
+
         } catch (err) {
             next(err);
         }
