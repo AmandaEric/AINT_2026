@@ -218,6 +218,13 @@ const exam = {
     finishing: false,
     lastRecordedAnswer: null,
     testCode: null,
+
+    // Allowed attempts
+    attemptId: null,
+    studentName: "",
+    attemptNumber: null,
+    maxAttempts: null,
+
     gradingGuidelines: "",
     timerEnabled: false,
     timeLimitSeconds: 0,

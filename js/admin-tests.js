@@ -1,18 +1,18 @@
-
 /* ==========================================================
    AINT ADMIN TESTS
    - Add, display, and remove questions (with points and an optional image)
    - Add, display, and remove grading guidelines
    - Optional timer (enabled + minutes)
+   - Optional limit on the number of attempts per student
    - Create tests
    - Upload and replace PDF reading materials
    - View existing tests
-   - Edit test names, questions, grading guidelines, and timer
+   - Edit test names, questions, grading guidelines, timer and attempts
 
    Needs core.js to be loaded first (BACKEND_URL, AINT_LIMITS).
    ========================================================== */
 
-(() => {
+   (() => {
     "use strict";
 
     const API = BACKEND_URL;
@@ -30,6 +30,9 @@
     const MAX_POINTS = LIMITS.maxPoints;
     const MAX_QUESTION_LENGTH = LIMITS.maxQuestionLength;
     const MAX_GUIDELINES_LENGTH = LIMITS.maxGuidelinesLength;
+
+    // Must match cleanMaxAttempts() in server.js
+    const MAX_ATTEMPTS_LIMIT = LIMITS.maxAttempts || 100;
 
     const categories = {
         objective: {
@@ -757,6 +760,66 @@
     }
 
     /* ----------------------------------------------------------
+       ALLOWED ATTEMPTS
+       max_attempts is a whole number, or null for "no limit".
+       ---------------------------------------------------------- */
+
+    function resetAttemptInputs() {
+        if ($("allowedAttemptsEnabled")) {
+            $("allowedAttemptsEnabled").checked = false;
+        }
+
+        if ($("maxAttempts")) {
+            $("maxAttempts").value = 1;
+        }
+
+        if ($("attemptSettings")) {
+            $("attemptSettings").hidden = true;
+        }
+    }
+
+    // Shows a saved value from the server (a number, or null for no limit)
+    function showAttemptSettings(maxAttempts) {
+        const hasLimit =
+            maxAttempts !== null &&
+            maxAttempts !== undefined &&
+            Number(maxAttempts) > 0;
+
+        if ($("allowedAttemptsEnabled")) {
+            $("allowedAttemptsEnabled").checked = hasLimit;
+        }
+
+        if ($("maxAttempts")) {
+            $("maxAttempts").value = hasLimit ? Number(maxAttempts) : 1;
+        }
+
+        if ($("attemptSettings")) {
+            $("attemptSettings").hidden = !hasLimit;
+        }
+    }
+
+    // Returns { error } if invalid, otherwise { max_attempts }
+    function getAttemptSettings() {
+        const enabled = $("allowedAttemptsEnabled")?.checked || false;
+        const attempts = parseInt($("maxAttempts")?.value, 10);
+
+        if (
+            enabled &&
+            (!Number.isInteger(attempts) ||
+                attempts < 1 ||
+                attempts > MAX_ATTEMPTS_LIMIT)
+        ) {
+            return {
+                error: `Enter a number of attempts between 1 and ${MAX_ATTEMPTS_LIMIT}.`,
+            };
+        }
+
+        return {
+            max_attempts: enabled ? attempts : null,
+        };
+    }
+
+    /* ----------------------------------------------------------
        CREATE TEST
        ---------------------------------------------------------- */
 
@@ -798,6 +861,13 @@
             return;
         }
 
+        const attempts = getAttemptSettings();
+
+        if (attempts.error) {
+            alert(attempts.error);
+            return;
+        }
+
         if (button) {
             button.disabled = true;
         }
@@ -813,6 +883,7 @@
                     grading_guidelines: getGuidelinesString(),
                     timer_enabled: timer.timer_enabled,
                     time_limit_minutes: timer.time_limit_minutes,
+                    max_attempts: attempts.max_attempts,
                 }),
             });
 
@@ -844,6 +915,7 @@
             resetQuestions();
             resetGuidelines();
             resetTimerInputs();
+            resetAttemptInputs();
 
             if ($("testName")) {
                 $("testName").value = "";
@@ -987,6 +1059,9 @@
                 $("timerSettings").hidden = !test.timerEnabled;
             }
 
+            // Allowed attempts (null means no limit)
+            showAttemptSettings(test.maxAttempts);
+
             // Clear any previously selected PDF.
             resetReadingMaterialInput();
 
@@ -1042,6 +1117,13 @@
             return;
         }
 
+        const attempts = getAttemptSettings();
+
+        if (attempts.error) {
+            alert(attempts.error);
+            return;
+        }
+
         const button = $("createTest");
 
         if (button) {
@@ -1058,6 +1140,7 @@
                         grading_guidelines: guidelines,
                         timer_enabled: timer.timer_enabled,
                         time_limit_minutes: timer.time_limit_minutes,
+                        max_attempts: attempts.max_attempts,
                     }),
                 }
             );
@@ -1192,6 +1275,7 @@
         resetQuestions();
         resetGuidelines();
         resetTimerInputs();
+        resetAttemptInputs();
         resetReadingMaterialInput();
 
         if ($("testName")) {
@@ -1235,6 +1319,11 @@
             }
         }
 
+        if ($("maxAttempts")) {
+            $("maxAttempts").min = 1;
+            $("maxAttempts").max = MAX_ATTEMPTS_LIMIT;
+        }
+
         // Add-question buttons.
         for (const [category, config] of Object.entries(categories)) {
             $(config.button)?.addEventListener("click", () => {
@@ -1256,6 +1345,13 @@
         $("timerEnabled")?.addEventListener("change", (event) => {
             if ($("timerSettings")) {
                 $("timerSettings").hidden = !event.target.checked;
+            }
+        });
+
+        // Allowed attempts.
+        $("allowedAttemptsEnabled")?.addEventListener("change", (event) => {
+            if ($("attemptSettings")) {
+                $("attemptSettings").hidden = !event.target.checked;
             }
         });
 
@@ -1312,6 +1408,7 @@
                     resetQuestions();
                     resetGuidelines();
                     resetTimerInputs();
+                    resetAttemptInputs();
                     resetReadingMaterialInput();
 
                     if ($("testName")) {

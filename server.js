@@ -353,6 +353,25 @@ function cleanPoints(value) {
 
     return points;
 }
+// A whole number from 1 to 100, or null for "no limit".
+// Throws an Error with a message that is safe to show to the admin.
+function cleanMaxAttempts(value) {
+    if (value === undefined || value === null || value === "") return null;
+
+    const attempts = Number(value);
+
+    if (!Number.isInteger(attempts) || attempts < 1 || attempts > 100) {
+        throw new Error("Maximum attempts must be a whole number from 1 to 100.");
+    }
+
+    return attempts;
+}
+
+// Collapses extra spaces so "Jane  Doe " and "Jane Doe" count as the same
+// student. MySQL's default collation ignores upper/lower case in the lookup.
+function cleanStudentName(value) {
+    return String(value || "").replace(/\s+/g, " ").trim().slice(0, 100);
+}
 
 // The points for every question in a test, keyed by the question text.
 // Used when grading, so the browser can never choose its own points.
@@ -366,7 +385,7 @@ async function getPointsByQuestion(testId) {
 
 async function getOwnedTest(code, adminId) {
     const [rows] = await pool.execute(
-        `SELECT id, test_code, test_name, grading_guidelines
+        `SELECT id, test_code, test_name, grading_guidelines, max_attempts
            FROM tests
           WHERE test_code = ? AND admin_id = ?`,
         [String(code).toUpperCase(), adminId]
@@ -542,6 +561,13 @@ app.post("/api/tests", requireAdmin, async (req, res, next) => {
             req.body.grading_guidelines || ""
         ).trim().slice(0, MAX_GUIDELINES_LENGTH);
 
+        let maxAttempts;
+        try {
+            maxAttempts = cleanMaxAttempts(req.body.max_attempts);
+        } catch (err) {
+            return badRequest(res, err.message);
+        }
+
         const rows = [];
 
         for (const category of CATEGORIES) {
@@ -582,13 +608,14 @@ app.post("/api/tests", requireAdmin, async (req, res, next) => {
                 try {
                     const [result] = await conn.execute(
                         `INSERT INTO tests
-                            (admin_id, test_code, test_name, grading_guidelines)
-                        VALUES (?, ?, ?, ?)`,
+                            (admin_id, test_code, test_name, grading_guidelines, max_attempts)
+                        VALUES (?, ?, ?, ?, ?)`,
                         [
                             req.admin.Admin_id,
                             code,
                             name || null,
-                            gradingGuidelines || null
+                            gradingGuidelines || null,
+                            maxAttempts
                         ]
                     );
                     testId = result.insertId;
@@ -684,6 +711,7 @@ app.get("/api/tests/:code/edit", requireAdmin, async (req, res, next) => {
             code: test.test_code,
             name: test.test_name || "",
             gradingGuidelines: test.grading_guidelines || "",
+            maxAttempts: test.max_attempts === null ? null : Number(test.max_attempts),
             submitted: Number(count.n),
             questions: grouped,
         });
@@ -857,6 +885,17 @@ app.patch("/api/tests/:code", requireAdmin, async (req, res, next) => {
             values.push(guidelines || null);
         }
 
+        if (req.body.max_attempts !== undefined) {
+            let maxAttempts;
+            try {
+                maxAttempts = cleanMaxAttempts(req.body.max_attempts);
+            } catch (err) {
+                return badRequest(res, err.message);
+            }
+            fields.push("max_attempts = ?");
+            values.push(maxAttempts);
+        }
+
         if (fields.length === 0) return badRequest(res, "Nothing to update.");
 
         await pool.execute(
@@ -909,38 +948,99 @@ app.get("/api/tests/:code/results", requireAdmin, async (req, res, next) => {
 // Test codes are short, so limit how fast they can be guessed
 
 app.post("/api/tests/:code/start", rateLimit(20, 60 * 1000), async (req, res, next) => {
+    const code = String(req.params.code || "").trim().toUpperCase();
+    const studentName = cleanStudentName(req.body?.studentName);
+
+    let conn;
+
     try {
-        const [tests] = await pool.execute(
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+
+        // Lock the test row so two rapid Start requests cannot both pass the limit.
+        const [tests] = await conn.execute(
             `SELECT
                 t.id,
                 t.grading_guidelines,
+                t.max_attempts,
                 EXISTS (
                     SELECT 1
                     FROM Test_Reading_Materials rm
                     WHERE rm.test_code = t.test_code
                 ) AS has_reading_material
-            FROM tests t
-            WHERE t.test_code = ?`,
-            [String(req.params.code).toUpperCase()]
+             FROM tests t
+             WHERE t.test_code = ?
+             FOR UPDATE`,
+            [code]
         );
 
-        if (!tests[0]) {
+        const test = tests[0];
+
+        if (!test) {
+            await conn.rollback();
             return res.status(404).json({
                 success: false,
                 error: "Test not found."
             });
         }
 
-        // Retrieve the question, points, and attached image.
-        const [questions] = await pool.execute(
+        const maxAttempts =
+            test.max_attempts === null ? null : Number(test.max_attempts);
+
+        if (maxAttempts !== null && !studentName) {
+            await conn.rollback();
+            return badRequest(res, "Enter your name to start this test.");
+        }
+
+        let attemptsUsed = 0;
+
+        // Record attempts for named students, even when the test is unlimited.
+        if (studentName) {
+            const [[row]] = await conn.execute(
+                `SELECT COUNT(*) AS n
+                   FROM Exam_Attempts
+                  WHERE test_code = ?
+                    AND student_name = ?
+                    AND status <> 'ABANDONED'`,
+                [code, studentName]
+            );
+            attemptsUsed = Number(row.n);
+        }
+
+        if (maxAttempts !== null && attemptsUsed >= maxAttempts) {
+            await conn.rollback();
+            return res.status(403).json({
+                success: false,
+                error: maxAttempts === 1
+                    ? "You have already taken this test. Only 1 attempt is allowed."
+                    : `You have used all ${maxAttempts} allowed attempts for this test.`,
+                attemptsUsed,
+                maxAttempts
+            });
+        }
+
+        let attemptId = null;
+
+        if (studentName) {
+            const [attemptResult] = await conn.execute(
+                `INSERT INTO Exam_Attempts
+                    (test_code, student_name, started_at, status)
+                 VALUES (?, ?, UTC_TIMESTAMP(), 'IN_PROGRESS')`,
+                [code, studentName]
+            );
+            attemptId = attemptResult.insertId;
+        }
+
+        const [questions] = await conn.execute(
             `SELECT Question_id, category, question_text, points, image
-             FROM Questions
-             WHERE Test_id = ?
-             ORDER BY Question_id`,
-            [tests[0].id]
+               FROM Questions
+              WHERE Test_id = ?
+              ORDER BY Question_id`,
+            [test.id]
         );
 
-        // Organize questions by category.
+        await conn.commit();
+
         const grouped = {
             objective: [],
             semi: [],
@@ -961,12 +1061,17 @@ app.post("/api/tests/:code/start", rateLimit(20, 60 * 1000), async (req, res, ne
         res.json({
             success: true,
             questions: grouped,
-            grading_guidelines: tests[0].grading_guidelines || "",
-            hasReadingMaterial: Boolean(tests[0].has_reading_material)
+            grading_guidelines: test.grading_guidelines || "",
+            hasReadingMaterial: Boolean(test.has_reading_material),
+            attemptId,
+            attemptNumber: attemptId ? attemptsUsed + 1 : null,
+            maxAttempts
         });
-
     } catch (err) {
+        if (conn) await conn.rollback().catch(() => {});
         next(err);
+    } finally {
+        if (conn) conn.release();
     }
 });
 
@@ -1077,7 +1182,7 @@ app.post("/api/tests/:code/submit", rateLimit(10, 60 * 1000), async (req, res, n
         const test = tests[0];
         if (!test) return res.status(404).json({ success: false, error: "Test not found." });
 
-        const studentName = String(req.body.studentName || "").trim().slice(0, 100);
+        const studentName = cleanStudentName(req.body.studentName);
         if (!studentName) return badRequest(res, "Student name is required.");
 
         const rawLog = Array.isArray(req.body.log) ? req.body.log.slice(0, 100) : [];
@@ -1162,6 +1267,26 @@ app.post("/api/tests/:code/submit", rateLimit(10, 60 * 1000), async (req, res, n
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [test.id, student.insertId, percent, gradingFailed, summary, durationSeconds, JSON.stringify(details)]
         );
+
+        // Mark this specific attempt as submitted. A logging problem must not
+        // prevent the student's answers and score from being saved.
+        try {
+            const attemptId = Number(req.body.attemptId);
+
+            if (Number.isInteger(attemptId) && attemptId > 0) {
+                await pool.execute(
+                    `UPDATE Exam_Attempts
+                        SET submitted_at = UTC_TIMESTAMP(), status = 'SUBMITTED'
+                      WHERE attempt_id = ?
+                        AND test_code = ?
+                        AND student_name = ?
+                        AND status = 'IN_PROGRESS'`,
+                    [attemptId, String(req.params.code).toUpperCase(), studentName]
+                );
+            }
+        } catch (err) {
+            console.error("ATTEMPT UPDATE ERROR:", err.message);
+        }
 
         try {
             const title = test.test_name || "Untitled test";

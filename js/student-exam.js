@@ -263,7 +263,7 @@ async function finishExam(timeUp = false) {
 
 bindEvent(el.startButton, "click", async () => {
     if (!state.testRunning) {
-        if (el.studentName && !el.studentName.value.trim()) {
+        if (el.studentName || !el.studentName.value.trim()) {
             alert("Please enter your name first.");
             return;
         }
@@ -278,23 +278,52 @@ bindEvent(el.startButton, "click", async () => {
         el.startButton.disabled = true;
 
         try {
+            const studentName = el.studentName
+                ? el.studentName.value.trim()
+                : "";
+            
             const response = await fetch(
                 `${BACKEND_URL}/api/tests/${encodeURIComponent(code)}/start`,
-                { method: "POST" }
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        studentName
+                    })
+                }
             );
 
             if (response.status === 404) {
                 alert("That test code was not found. Check it and try again.");
                 return;
             }
-
+            
+            const data = await response.json();
+            
+            if (response.status === 403) {
+                alert(
+                    data.message ||
+                    "You have reached the maximum number of attempts for this test."
+                );
+                return;
+            }
+            
             if (!response.ok) {
-                throw new Error(`Server responded with ${response.status}`);
+                throw new Error(
+                    data.message || `Server responded with ${response.status}`
+                );
             }
 
-            const data = await response.json();
-
             exam.testCode = code;
+
+            // Save the student and attempt information returned by the server.
+            exam.studentName = studentName;
+            exam.attemptId = data.attemptId ?? null;
+            exam.attemptNumber = data.attemptNumber ?? null;
+            exam.maxAttempts = data.maxAttempts ?? null;
+            
             exam.testQuestions = data.questions;
             exam.gradingGuidelines = data.grading_guidelines || "";
             // Load the PDF associated with this test, if one exists.
@@ -366,7 +395,8 @@ async function submitExam() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    studentName: el.studentName ? el.studentName.value.trim() : "",
+                    studentName: exam.studentName,
+                    attemptId: exam.attemptId,
                     durationSeconds: state.seconds,
                     log: exam.log
                 })

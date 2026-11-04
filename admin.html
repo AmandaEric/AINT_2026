@@ -114,6 +114,25 @@
             <div id="timerSettings" hidden>
                 <input id="timeLimit" type="number" min="1" max="600" placeholder="Time limit (minutes)">
             </div>
+            <!-- Allowed Attempts -->
+            <h3>Allowed Attempts</h3>
+
+            <label>
+                <input type="checkbox" id="allowedAttemptsEnabled">
+                Limit the number of attempts
+            </label>
+
+            <div id="attemptSettings" hidden>
+                <label for="maxAttempts">Maximum Attempts</label>
+                <input
+                    id="maxAttempts"
+                    type="number"
+                    min="1"
+                    max="100"
+                    value="1"
+                    placeholder="Maximum attempts"
+                >
+            </div>
                 
 
 

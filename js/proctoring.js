@@ -1,18 +1,33 @@
-
 /*
  * proctoring.js
- * First version of AINT's free proctoring system.
+ * AINT's free proctoring system.
  *
  * Detects:
- * - Leaving the exam tab
- * - Returning to the exam tab
- * - Exiting fullscreen
+ * - Leaving the exam tab (TAB_HIDDEN) and returning to it (TAB_VISIBLE)
+ * - Leaving the browser window, for example clicking another app,
+ *   another monitor, or a window beside the browser (WINDOW_BLUR),
+ *   and coming back (WINDOW_FOCUS)
+ * - Exiting fullscreen (FULLSCREEN_EXIT)
  *
- * Events are stored in the browser for now.
- * We will connect them to the backend and MySQL next.
+ * Every event is kept in the browser and also sent to the server, which
+ * saves it in the Proctoring_Events table. The server only accepts the
+ * event types listed in server.js (allowedTypes), so a new type must be
+ * added there too.
  */
 
 window.aintProctoringEvents = [];
+
+let proctoringActive = false;
+
+// How long the window must stay unfocused before it is flagged.
+// The pause also lets a tab switch be recognised (see below), and
+// ignores a very quick flicker of focus. Raise it for fewer flags.
+const WINDOW_BLUR_DELAY_MS = 400;
+
+let blurTimer = null;
+let windowBlurRecorded = false;
+let proctoringPausedUntil = 0;
+
 async function sendProctoringEvent(event) {
     if (!exam.testCode) {
         console.warn("Cannot save proctoring event: no test code.");
@@ -46,8 +61,6 @@ async function sendProctoringEvent(event) {
     }
 }
 
-let proctoringActive = false;
-
 function recordProctoringEvent(type, details = "") {
     if (!proctoringActive) return;
 
@@ -69,11 +82,19 @@ function startProctoring() {
     proctoringActive = true;
     window.aintProctoringEvents = [];
 
+    windowBlurRecorded = false;
+    clearTimeout(blurTimer);
+    blurTimer = null;
+
     console.log("AINT proctoring started.");
 }
 
 function stopProctoring() {
     proctoringActive = false;
+
+    clearTimeout(blurTimer);
+    blurTimer = null;
+    windowBlurRecorded = false;
 
     console.log(
         "AINT proctoring stopped. Events:",
@@ -81,7 +102,17 @@ function stopProctoring() {
     );
 }
 
-// Detect when the student leaves or returns to the exam tab.
+// Optional: ignore window-focus changes for a few seconds.
+// Browser pop-ups (confirm and alert boxes, the microphone permission
+// prompt) can take focus from the page. Call this just before one:
+//   pauseProctoring(5000);
+function pauseProctoring(milliseconds = 3000) {
+    proctoringPausedUntil = Date.now() + milliseconds;
+}
+
+// ------------------------------------------
+// TAB: the student left or returned to the exam tab
+// ------------------------------------------
 document.addEventListener("visibilitychange", () => {
     if (!proctoringActive) return;
 
@@ -98,7 +129,59 @@ document.addEventListener("visibilitychange", () => {
     }
 });
 
-// Detect when the student exits fullscreen.
+// ------------------------------------------
+// WINDOW: the whole browser window lost or regained focus
+// ------------------------------------------
+window.addEventListener("blur", () => {
+    if (!proctoringActive) return;
+
+    clearTimeout(blurTimer);
+
+    blurTimer = setTimeout(() => {
+        blurTimer = null;
+
+        if (!proctoringActive) return;
+
+        // Switching tabs also blurs the window. TAB_HIDDEN already
+        // covers that, so do not flag it a second time.
+        if (document.hidden) return;
+
+        // Focus came back before the delay ended.
+        if (document.hasFocus()) return;
+
+        // A pop-up was expected (see pauseProctoring).
+        if (Date.now() < proctoringPausedUntil) return;
+
+        if (windowBlurRecorded) return;
+        windowBlurRecorded = true;
+
+        recordProctoringEvent(
+            "WINDOW_BLUR",
+            "Student left the exam window (clicked another window or app)."
+        );
+    }, WINDOW_BLUR_DELAY_MS);
+});
+
+window.addEventListener("focus", () => {
+    clearTimeout(blurTimer);
+    blurTimer = null;
+
+    if (!proctoringActive) return;
+
+    // Only report a return if the departure was reported.
+    if (windowBlurRecorded) {
+        windowBlurRecorded = false;
+
+        recordProctoringEvent(
+            "WINDOW_FOCUS",
+            "Student returned to the exam window."
+        );
+    }
+});
+
+// ------------------------------------------
+// FULLSCREEN: the student exited fullscreen
+// ------------------------------------------
 document.addEventListener("fullscreenchange", () => {
     if (!proctoringActive) return;
 
@@ -113,3 +196,4 @@ document.addEventListener("fullscreenchange", () => {
 // Make the functions available to student-exam.js.
 window.startProctoring = startProctoring;
 window.stopProctoring = stopProctoring;
+window.pauseProctoring = pauseProctoring;
