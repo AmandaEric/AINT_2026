@@ -283,10 +283,12 @@ async function finishExam(timeUp = false) {
 }
 
 bindEvent(el.startButton, "click", async () => {
-    if (!el.studentName || !el.studentName.value.trim()) {
-        alert("Please enter your name first.");
-        return;
-    }
+    if (!state.testRunning) {
+
+        if (!el.studentName || !el.studentName.value.trim()) {
+            alert("Please enter your name first.");
+            return;
+        }
 
         const code = (el.testCodeInput?.value || "").trim().toUpperCase();
 
