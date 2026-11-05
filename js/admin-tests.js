@@ -68,7 +68,7 @@
     };
 
     let guidelineItems = [];
-
+    let allowedTabs = [];
     let currentTestCode = null;
     let currentTestName = "";
     let currentTestGuidelines = "";
@@ -818,6 +818,116 @@
             max_attempts: enabled ? attempts : null,
         };
     }
+    /* ----------------------------------------------------------
+    APPROVED WEBSITES
+    ---------------------------------------------------------- */
+
+    // Display the approved websites in the admin page.
+    function renderAllowedTabs() {
+        const list = $("allowedTabsList");
+        if (!list) return;
+
+        list.replaceChildren();
+
+        if (allowedTabs.length === 0) {
+            const empty = document.createElement("p");
+            empty.textContent = "No approved websites added.";
+            list.appendChild(empty);
+            return;
+        }
+
+        allowedTabs.forEach((website, index) => {
+            const item = document.createElement("div");
+            item.className = "admin-list-item";
+
+            const description = document.createElement("span");
+            description.textContent =
+                `${website.allowed_url} — ${
+                    website.match_type === "DOMAIN"
+                        ? "Entire domain"
+                        : "Exact URL"
+                }`;
+
+            const remove = makeButton("Remove", "remove-website", () => {
+                allowedTabs.splice(index, 1);
+                renderAllowedTabs();
+            });
+
+            item.append(description, remove);
+            list.appendChild(item);
+        });
+    }
+
+    // Add a website when the admin clicks the button.
+    function addAllowedTab() {
+        const urlInput = $("allowedTabUrl");
+        const matchInput = $("allowedTabMatchType");
+
+        if (!urlInput || !matchInput) return;
+
+        const url = urlInput.value.trim();
+        const matchType = matchInput.value;
+
+        if (!url) {
+            alert("Please enter a website URL or domain.");
+            urlInput.focus();
+            return;
+        }
+
+        const duplicate = allowedTabs.some(
+            website =>
+                website.allowed_url.toLowerCase() === url.toLowerCase() &&
+                website.match_type === matchType
+        );
+
+        if (duplicate) {
+            alert("That website has already been added.");
+            return;
+        }
+
+        allowedTabs.push({
+            allowed_url: url,
+            match_type: matchType
+        });
+
+        urlInput.value = "";
+        renderAllowedTabs();
+        urlInput.focus();
+    }
+
+    // Load saved websites when opening an existing test.
+    async function loadAllowedTabs(code) {
+        const data = await api(
+            `/api/tests/${encodeURIComponent(code)}/allowed-tabs`
+        );
+
+        allowedTabs = data.allowedTabs || [];
+        renderAllowedTabs();
+    }
+
+    // Save the current website list to the database.
+    async function saveAllowedTabs(code) {
+        await api(
+            `/api/tests/${encodeURIComponent(code)}/allowed-tabs`,
+            {
+                method: "PUT",
+                body: JSON.stringify({
+                    allowedTabs: allowedTabs
+                })
+            }
+        );
+    }
+
+    // Clear the list when starting a completely new test.
+    function resetAllowedTabs() {
+        allowedTabs = [];
+
+        if ($("allowedTabUrl")) {
+            $("allowedTabUrl").value = "";
+        }
+
+        renderAllowedTabs();
+    }
 
     /* ----------------------------------------------------------
        CREATE TEST
@@ -886,6 +996,15 @@
                     max_attempts: attempts.max_attempts,
                 }),
             });
+            // Save approved websites for this newly created test.
+            let websitesSaved = true;
+
+            try {
+                await saveAllowedTabs(data.code);
+            } catch (error) {
+                websitesSaved = false;
+                console.error("Could not save approved websites:", error);
+            }
 
             // The test now exists. Upload its PDF separately.
             const pdfResult = await uploadSelectedReadingMaterial(data.code);
@@ -897,10 +1016,15 @@
 
                 const message = document.createElement("p");
 
-                message.textContent =
-                    pdfResult.success
-                        ? "Test created successfully! Test code: "
-                        : "Test created, but the PDF upload failed. Test code: ";
+                message.textContent = "Test created successfully! Test code: ";
+
+                if (!websitesSaved) {
+                    message.textContent =
+                        "Test created, but approved websites could not be saved. Test code: ";
+                } else if (!pdfResult.success) {
+                    message.textContent =
+                        "Test created, but the PDF upload failed. Test code: ";
+                }
 
                 const code = document.createElement("strong");
                 code.textContent = data.code;
@@ -916,6 +1040,7 @@
             resetGuidelines();
             resetTimerInputs();
             resetAttemptInputs();
+            resetAllowedTabs();
 
             if ($("testName")) {
                 $("testName").value = "";
@@ -1023,6 +1148,7 @@
             currentTestName = test.name || "";
             currentTestGuidelines = test.gradingGuidelines || "";
             editingTest = true;
+            await loadAllowedTabs(test.code);
 
             const mapQuestion = (q) => ({
                 id: q.id,
@@ -1144,6 +1270,7 @@
                     }),
                 }
             );
+            await saveAllowedTabs(currentTestCode);
 
             currentTestName = name;
             currentTestGuidelines = guidelines;
@@ -1277,6 +1404,7 @@
         resetTimerInputs();
         resetAttemptInputs();
         resetReadingMaterialInput();
+        resetAllowedTabs();
 
         if ($("testName")) {
             $("testName").value = "";
@@ -1354,6 +1482,20 @@
                 $("attemptSettings").hidden = !event.target.checked;
             }
         });
+        // Approved websites.
+        $("addAllowedTabButton")?.addEventListener(
+            "click",
+            addAllowedTab
+        );
+
+        $("allowedTabUrl")?.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                addAllowedTab();
+            }
+        });
+
+        renderAllowedTabs();
 
         // Create or save test.
         $("createTest")?.addEventListener("click", createTest);

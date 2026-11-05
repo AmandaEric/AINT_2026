@@ -1,18 +1,17 @@
 /*
  * proctoring.js
- * AINT's free proctoring system.
+ * AINT's browser-based proctoring system.
  *
  * Detects:
- * - Leaving the exam tab (TAB_HIDDEN) and returning to it (TAB_VISIBLE)
- * - Leaving the browser window, for example clicking another app,
- *   another monitor, or a window beside the browser (WINDOW_BLUR),
- *   and coming back (WINDOW_FOCUS)
+ * - Leaving the browser window (WINDOW_BLUR)
+ * - Returning to the browser window (WINDOW_FOCUS)
  * - Exiting fullscreen (FULLSCREEN_EXIT)
  *
- * Every event is kept in the browser and also sent to the server, which
- * saves it in the Proctoring_Events table. The server only accepts the
- * event types listed in server.js (allowedTypes), so a new type must be
- * added there too.
+ * Approved and unauthorized website monitoring will be handled
+ * by the AINT Chrome extension.
+ *
+ * The extension will compare visited URLs against the approved
+ * websites saved for the student's test.
  */
 
 window.aintProctoringEvents = [];
@@ -45,7 +44,8 @@ async function sendProctoringEvent(event) {
                 body: JSON.stringify({
                     type: event.type,
                     details: event.details,
-                    timestamp: event.timestamp
+                    timestamp: event.timestamp,
+                    attemptId: exam.attemptId
                 })
             }
         );
@@ -110,24 +110,7 @@ function pauseProctoring(milliseconds = 3000) {
     proctoringPausedUntil = Date.now() + milliseconds;
 }
 
-// ------------------------------------------
-// TAB: the student left or returned to the exam tab
-// ------------------------------------------
-document.addEventListener("visibilitychange", () => {
-    if (!proctoringActive) return;
 
-    if (document.hidden) {
-        recordProctoringEvent(
-            "TAB_HIDDEN",
-            "Student left or hid the exam tab."
-        );
-    } else {
-        recordProctoringEvent(
-            "TAB_VISIBLE",
-            "Student returned to the exam tab."
-        );
-    }
-});
 
 // ------------------------------------------
 // WINDOW: the whole browser window lost or regained focus

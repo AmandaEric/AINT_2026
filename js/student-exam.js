@@ -18,6 +18,26 @@ const replayButton = document.getElementById("replayButton");
 
 let lastSpokenText = "";
 let followUpNeedsAnswer = false;
+// Send exam information to the AINT Chrome extension.
+function notifyAintExtension(action) {
+    const messageType = action === "START"
+        ? "AINT_PROCTORING_START"
+        : "AINT_PROCTORING_STOP";
+
+    window.postMessage(
+        {
+            source: "AINT_PAGE",
+            type: messageType,
+            payload: {
+                backendUrl: BACKEND_URL,
+                testCode: exam.testCode || "",
+                attemptId: exam.attemptId ?? null,
+                allowedTabs: exam.allowedTabs || []
+            }
+        },
+        window.location.origin
+    );
+}
 // ==========================================
 // STUDENT: READING MATERIAL PDF
 // ==========================================
@@ -259,6 +279,7 @@ async function finishExam(timeUp = false) {
         exam.finishing = false;
     }
     stopProctoring();
+    notifyAintExtension("STOP");
 }
 
 bindEvent(el.startButton, "click", async () => {
@@ -323,7 +344,12 @@ bindEvent(el.startButton, "click", async () => {
             exam.attemptId = data.attemptId ?? null;
             exam.attemptNumber = data.attemptNumber ?? null;
             exam.maxAttempts = data.maxAttempts ?? null;
-            
+
+            // Save the approved websites returned by the backend.
+            exam.allowedTabs = Array.isArray(data.allowedTabs)
+                ? data.allowedTabs
+                : [];
+
             exam.testQuestions = data.questions;
             exam.gradingGuidelines = data.grading_guidelines || "";
             // Load the PDF associated with this test, if one exists.
@@ -357,10 +383,13 @@ bindEvent(el.startButton, "click", async () => {
 
         state.seconds = 0;
         state.selectedQuestions = [];
-
         updateTimerDisplay();
         startTimer();
         startProctoring();
+        
+        // Tell the Chrome extension that this exam has started.
+        notifyAintExtension("START");
+        
         addAllQuestions();
         askNextQuestion();
 
