@@ -1646,7 +1646,10 @@ app.post("/api/tts", rateLimit(30, 60 * 1000), async (req, res) => {
             await response.arrayBuffer()
         );
 
-        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader(
+            "Content-Type",
+            response.headers.get("content-type") || "audio/mpeg"
+        );
         res.setHeader("Cache-Control", "no-store");
         res.send(audioBuffer);
 
