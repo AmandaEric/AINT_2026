@@ -1,23 +1,38 @@
-import hashlib, os, subprocess
+import hashlib, os, threading
 import numpy as np
 import soundfile as sf
 from kokoro import KPipeline
 
-CACHE_DIR = "audio_cache"
-VOICE = "af_heart"      # change to your chosen voice
-_pipe = None
+CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audio_cache")
+VOICE = "af_bella"
+os.makedirs(CACHE_DIR, exist_ok=True)
 
-def speak(text):
+_pipe = None
+_lock = threading.Lock()
+
+def get_pipeline():
     global _pipe
-    os.makedirs(CACHE_DIR, exist_ok=True)
+    if _pipe is None:
+        _pipe = KPipeline(lang_code="a")
+    return _pipe
+
+def synthesize(text: str) -> str:
+    text = text.strip()
     key = hashlib.md5(f"{VOICE}:{text}".encode()).hexdigest()
     path = os.path.join(CACHE_DIR, key + ".wav")
 
-    if not os.path.exists(path):          # only generate once per question
-        if _pipe is None:
-            _pipe = KPipeline(lang_code="a")
-        chunks = [a for _, _, a in _pipe(text, voice=VOICE)]
-        audio = np.concatenate([c.numpy() if hasattr(c, "numpy") else c for c in chunks])
-        sf.write(path, audio, 24000)
+    if os.path.exists(path):
+        return path
 
-    subprocess.run(["afplay", path])      # afplay is Mac-only
+    with _lock:
+        if os.path.exists(path):
+            return path
+        chunks = [a for _, _, a in get_pipeline()(text, voice=VOICE)]
+        audio = np.concatenate(
+            [c.numpy() if hasattr(c, "numpy") else c for c in chunks]
+        )
+        tmp = path + ".tmp.wav"
+        sf.write(tmp, audio, 24000)
+        os.replace(tmp, path)
+
+    return path

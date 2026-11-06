@@ -18,6 +18,14 @@ const replayButton = document.getElementById("replayButton");
 
 let lastSpokenText = "";
 let followUpNeedsAnswer = false;
+let awaitingNext = false;
+const evaluateLabel = el.evaluateButton ? el.evaluateButton.textContent : "Evaluate";
+
+function setEvaluateLabel() {
+    if (el.evaluateButton) {
+        el.evaluateButton.textContent = awaitingNext ? "Next Question" : evaluateLabel;
+    }
+}
 // Send exam information to the AINT Chrome extension.
 function notifyAintExtension(action) {
     const messageType = action === "START"
@@ -159,10 +167,8 @@ function updateTimerDisplay() {
     el.timer.textContent = `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function setQuestionButtonsEnabled(enabled) {
-    if (el.nextButton) {
-        el.nextButton.disabled = !enabled || followUpNeedsAnswer;
-    }
+function setQuestionButtonsEnabled() {
+    // Next button was removed; the Evaluate button now handles advancing.
 }
 
 function startTimer() {
@@ -381,6 +387,8 @@ bindEvent(el.startButton, "click", async () => {
         exam.finishing = false;
         exam.lastRecordedAnswer = null;
         followUpNeedsAnswer = false;
+        awaitingNext = false;
+        setEvaluateLabel();
 
         state.seconds = 0;
         state.selectedQuestions = [];
@@ -527,6 +535,8 @@ function showQuestionImage(src) {
 
 function askNextQuestion() {
     if (followUpNeedsAnswer) return;
+    awaitingNext = false;
+    setEvaluateLabel();
 
     const questionTextEl = el.questionText || document.getElementById("questionText");
     if (!questionTextEl) return;
@@ -538,6 +548,7 @@ function askNextQuestion() {
             ? "This test has no questions."
             : "That was the last question. Click Stop Test to submit your exam.";
         showQuestionImage("");
+        if (el.evaluateButton) el.evaluateButton.disabled = true;
         return;
     }
 
@@ -571,7 +582,7 @@ function askNextQuestion() {
     safeSpeak(picked.text);
 }
 
-bindEvent(el.nextButton, "click", askNextQuestion);
+
 
 // ==========================================
 // STUDENT: AI EVALUATION (follow-up questions)
@@ -708,11 +719,12 @@ async function handleEvaluate() {
             followUpNeedsAnswer = false;
             exam.current.pendingFollowUp = null;
 
-            setQuestionButtonsEnabled(state.testRunning);
+            awaitingNext = true;
+            setEvaluateLabel();
 
             addEvaluationLine(
                 "p",
-                "No follow-up question is needed."
+                "No follow-up question is needed. Click Next Question to continue."
             );
         }
 
@@ -777,14 +789,17 @@ function handleFollowUpAnswer() {
             "<p>You may continue to the next question.</p>";
     }
 
-    setQuestionButtonsEnabled(state.testRunning);
+    awaitingNext = true;
+    setEvaluateLabel();
 
     if (el.evaluateButton) {
         el.evaluateButton.disabled = false;
     }
 }
 bindEvent(el.evaluateButton, "click", () => {
-    if (followUpNeedsAnswer) {
+    if (awaitingNext) {
+        askNextQuestion();
+    } else if (followUpNeedsAnswer) {
         handleFollowUpAnswer();
     } else {
         handleEvaluate();
