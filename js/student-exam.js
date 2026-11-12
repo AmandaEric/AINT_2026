@@ -259,6 +259,8 @@ function saveUnsentAnswer() {
 // ==========================================
 // STUDENT: START / STOP / SUBMIT THE EXAM
 // ==========================================
+function startSessionSaver() {}
+function clearExamSession() {}
 
 async function finishExam(timeUp = false) {
     if (exam.submitted || exam.finishing) {
@@ -287,7 +289,7 @@ async function finishExam(timeUp = false) {
     } finally {
         exam.finishing = false;
     }
-``
+
 }
 
 bindEvent(el.startButton, "click", async () => {
@@ -304,7 +306,11 @@ bindEvent(el.startButton, "click", async () => {
             alert("Please enter your test code.");
             return;
         }
-        try { await document.documentElement.requestFullscreen(); } catch (e) {}
+        if (!isWindowMaximized()) {
+            alert("Please make your browser window full size, then click Start again.\n\nMac: double-click the top bar of the window. Windows: click the maximize button.");
+            return;
+        }
+
         el.startButton.disabled = true;
 
         try {
@@ -358,6 +364,7 @@ bindEvent(el.startButton, "click", async () => {
             exam.allowedTabs = Array.isArray(data.allowedTabs)
                 ? data.allowedTabs
                 : [];
+
 
             exam.testQuestions = data.questions;
             exam.gradingGuidelines = data.grading_guidelines || "";
@@ -422,6 +429,10 @@ async function submitExam() {
         if (el.evaluationBox) {
             el.evaluationBox.innerHTML = "<p>No questions were answered, so nothing was submitted.</p>";
         }
+        stopProctoring();
+        notifyAintExtension("STOP");
+        clearExamSession();
+        document.body.classList.remove("exam-active");
         return;
     }
 
@@ -451,6 +462,7 @@ async function submitExam() {
         exam.submitted = true;
         stopProctoring();
         notifyAintExtension("STOP");
+        window.aintFullscreenRequired = false;
         leaveFullscreen();
         clearExamSession();
         document.body.classList.remove("exam-active");

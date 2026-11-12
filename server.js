@@ -1693,7 +1693,10 @@ app.post(
                 "FULLSCREEN_EXIT",
                 "UNAUTHORIZED_TAB_OPENED",
                 "UNAUTHORIZED_TAB_SWITCHED",
-                "UNAUTHORIZED_WEBSITE_ACTIVE"
+                "UNAUTHORIZED_WEBSITE_ACTIVE",
+                "WINDOW_NOT_MAXIMIZED",
+                "WINDOW_MAXIMIZED",
+                "PAGE_RELOAD"
             ];
 
             if (!allowedTypes.includes(eventType)) {

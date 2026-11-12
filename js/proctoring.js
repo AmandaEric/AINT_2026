@@ -85,6 +85,9 @@ function startProctoring() {
     windowBlurRecorded = false;
     clearTimeout(blurTimer);
     blurTimer = null;
+    windowNotMaximizedRecorded = false;
+    clearInterval(sizeCheckTimer);
+    sizeCheckTimer = setInterval(checkWindowSize, 1000);
 
     console.log("AINT proctoring started.");
 }
@@ -95,6 +98,9 @@ function stopProctoring() {
     clearTimeout(blurTimer);
     blurTimer = null;
     windowBlurRecorded = false;
+    clearInterval(sizeCheckTimer);
+    sizeCheckTimer = null;
+    showMaximizeBanner(false);
 
     console.log(
         "AINT proctoring stopped. Events:",
@@ -174,6 +180,7 @@ window.addEventListener("focus", () => {
 // ------------------------------------------
 document.addEventListener("fullscreenchange", () => {
     if (!proctoringActive) return;
+    if (!window.aintFullscreenRequired) return;   // approved sites: fullscreen not required
 
     if (!document.fullscreenElement) {
         recordProctoringEvent(
@@ -182,6 +189,65 @@ document.addEventListener("fullscreenchange", () => {
         );
     }
 });
+// ------------------------------------------
+// WINDOW SIZE: the browser window must stay full size
+// ------------------------------------------
+const MAXIMIZE_TOLERANCE_PX = 40;
+
+let windowNotMaximizedRecorded = false;
+let sizeCheckTimer = null;
+
+function isWindowMaximized() {
+    return (
+        window.outerWidth  >= screen.availWidth  - MAXIMIZE_TOLERANCE_PX &&
+        window.outerHeight >= screen.availHeight - MAXIMIZE_TOLERANCE_PX
+    );
+}
+
+function showMaximizeBanner(show) {
+    let banner = document.getElementById("aint-maximize-banner");
+
+    if (!show) {
+        if (banner) banner.remove();
+        return;
+    }
+
+    if (!banner) {
+        banner = document.createElement("div");
+        banner.id = "aint-maximize-banner";
+        banner.textContent =
+            "Your window is not full size. Please maximize it now. This has been reported.";
+        banner.style.cssText =
+            "position:fixed;top:0;left:0;right:0;z-index:99999;padding:12px;" +
+            "background:#c62828;color:#fff;text-align:center;font:16px Arial,sans-serif;";
+        document.body.appendChild(banner);
+    }
+}
+
+function checkWindowSize() {
+    if (!proctoringActive) return;
+
+    const maximized = isWindowMaximized();
+
+    if (!maximized && !windowNotMaximizedRecorded) {
+        windowNotMaximizedRecorded = true;
+        showMaximizeBanner(true);
+        recordProctoringEvent(
+            "WINDOW_NOT_MAXIMIZED",
+            `Browser window is not full size (${window.outerWidth}x${window.outerHeight} on a ${screen.availWidth}x${screen.availHeight} screen).`
+        );
+    } else if (maximized && windowNotMaximizedRecorded) {
+        windowNotMaximizedRecorded = false;
+        showMaximizeBanner(false);
+        recordProctoringEvent(
+            "WINDOW_MAXIMIZED",
+            "Student made the window full size again."
+        );
+    }
+}
+
+window.addEventListener("resize", checkWindowSize);
+window.isWindowMaximized = isWindowMaximized;
 
 // Make the functions available to student-exam.js.
 window.startProctoring = startProctoring;
