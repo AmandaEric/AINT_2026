@@ -46,6 +46,9 @@ function notifyAintExtension(action) {
         window.location.origin
     );
 }
+function leaveFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
 // ==========================================
 // STUDENT: READING MATERIAL PDF
 // ==========================================
@@ -284,8 +287,7 @@ async function finishExam(timeUp = false) {
     } finally {
         exam.finishing = false;
     }
-    stopProctoring();
-    notifyAintExtension("STOP");
+``
 }
 
 bindEvent(el.startButton, "click", async () => {
@@ -302,7 +304,7 @@ bindEvent(el.startButton, "click", async () => {
             alert("Please enter your test code.");
             return;
         }
-
+        try { await document.documentElement.requestFullscreen(); } catch (e) {}
         el.startButton.disabled = true;
 
         try {
@@ -398,7 +400,8 @@ bindEvent(el.startButton, "click", async () => {
         
         // Tell the Chrome extension that this exam has started.
         notifyAintExtension("START");
-        
+        document.body.classList.add("exam-active");
+        startSessionSaver();
         addAllQuestions();
         askNextQuestion();
 
@@ -446,6 +449,11 @@ async function submitExam() {
         }
 
         exam.submitted = true;
+        stopProctoring();
+        notifyAintExtension("STOP");
+        leaveFullscreen();
+        clearExamSession();
+        document.body.classList.remove("exam-active");
 
         if (el.questionText) {
             el.questionText.textContent = "The exam is finished.";
@@ -689,11 +697,11 @@ async function handleEvaluate() {
             // Remember that the next answer belongs to this follow-up.
             exam.current.pendingFollowUp = data.followUpQuestion;
 
-            addEvaluationLine(
-                "p",
-                data.followUpQuestion,
-                "Follow-up:"
-            );
+            // addEvaluationLine(
+            //     "p",
+            //     data.followUpQuestion,
+            //     "Follow-up:"
+            // );
 
             if (el.questionText) {
                 el.questionText.textContent = data.followUpQuestion;

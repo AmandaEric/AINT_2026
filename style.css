@@ -609,3 +609,35 @@ p2{
         height: 650px;
     }
 }
+/* Hide the header and the name/code inputs once the exam starts. */
+body.exam-active .hide-during-exam {
+    display: none !important;
+}
+
+/* Hide the avatar box unless the current question has an image. */
+body.exam-active .avatar-container:not(.has-question-image) {
+    display: none;
+}
+
+/* When the box is shown for an image, show only the image. */
+body.exam-active .avatar-container.has-question-image #ai-avatar {
+    display: none;
+}
+/* Close the gaps left by the hidden header, inputs and avatar box. */
+body.exam-active {
+    padding-top: 10px;
+}
+
+body.exam-active .main-container {
+    padding-top: 0;
+}
+
+body.exam-active .center-screen {
+    gap: 0;
+}
+
+/* When a question has an image, give it more room now the header is gone. */
+body.exam-active .avatar-container.avatar-container-large {
+    height: min(70vh, 650px);
+    margin: 10px auto;
+}

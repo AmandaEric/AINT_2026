@@ -13,32 +13,28 @@
 </head>
 
 <body>
-    <header>
-        <a href="main.html" class="page-button">Student</a>
-        <h1> Artificial Intelligent Testing Center </h1>
-        <a href="admin.html" class="page-button">Admin</a>
-    
-    </header>
+        <header class="hide-during-exam">
+            <a href="main.html" class="page-button">Student</a>
+            <h1> Artificial Intelligent Testing Center </h1>
+            <a href="admin.html" class="page-button">Admin</a>
+        
+        </header>
 
-    <div class="main-container">
-        <div class="center-screen">
-
-            <div class="exam-info" id="examInfo">
-                <input class="student-name" type="text" placeholder="Your full name">
-                <input class="test-code" type="text" placeholder="Test Code">
-                <p class="proctored-info"> This is a proctored exam. do not leave the testing area. You must accept the terms and conditions to proceed.</p>
-            </div>
-
-    
-            <div class="avatar-container">
-                <img id="question-image" alt="Image for this question" hidden>
-                <img id="ai-avatar" src="aint_avatar_frames/01_neutral.png" alt="AINT AI speaking avatar">
-            </div>
-
-            <div class="test-controls">
-                <div class="timer">0:00</div>
-                <button class="start">Start</button>
-            </div>
+        <div class="main-container">
+            <div class="center-screen">
+                
+                <div class="exam-info hide-during-exam" id="examInfo">
+                    <input class="student-name" type="text" placeholder="Your full name">
+                    <input class="test-code" type="text" placeholder="Test Code">
+                    <p class="proctored-info"> This is a proctored exam. do not leave the testing area. You must accept the terms and conditions to proceed.</p>
+                </div>
+                
+                
+                <div class="avatar-container">
+                    <img id="question-image" alt="Image for this question" hidden>
+                    <img id="ai-avatar" src="aint_avatar_frames/01_neutral.png" alt="AINT AI speaking avatar">
+                </div>
+           
         </div>
         <div class="question-output">
             <button id="replayButton" class="replay-btn" type="button"
@@ -62,8 +58,12 @@
                 <textarea class="response" placeholder="Your spoken response will appear here..." disabled></textarea>
             </div>
             <div class="word-count" id="wordCount" aria-live="polite">Words: 0</div> 
+            <div class="test-controls">
+                <div class="timer">0:00</div>
+                <button class="start">Start</button>
+            </div>
             <button class="evaluate" disabled>
-                Evaluate Response
+                Submit
             </button>
         </div>
 
