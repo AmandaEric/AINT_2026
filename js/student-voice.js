@@ -21,13 +21,17 @@ if (el.responseBox) {
 updateWordCount();
 
 
+
 // ==========================================
-// STUDENT: SPEECH TO TEXT (the student answers by voice)
+// STUDENT: SPEECH TO TEXT
 // ==========================================
 
 const SpeechRecognition =
     window.SpeechRecognition ||
     window.webkitSpeechRecognition;
+
+let recognitionActive = false;
+let recognitionStarting = false;
 
 if (SpeechRecognition) {
 
@@ -38,36 +42,42 @@ if (SpeechRecognition) {
     state.recognition.lang = "en-US";
 
     state.recognition.onstart = () => {
-
+        recognitionActive = true;
+        recognitionStarting = false;
         state.isListening = true;
 
         if (el.listenButton) {
             el.listenButton.textContent = "Stop Listening";
         }
+
+        console.log("Speech recognition started.");
     };
 
     state.recognition.onend = () => {
-
+        recognitionActive = false;
+        recognitionStarting = false;
         state.isListening = false;
 
         if (el.listenButton) {
             el.listenButton.textContent = "Start Listening";
         }
+
+        console.log("Speech recognition stopped.");
     };
 
     state.recognition.onerror = (event) => {
-
         console.error("Speech recognition error:", event.error);
 
-        state.isListening = false;
+        recognitionStarting = false;
 
-        if (el.listenButton) {
-            el.listenButton.textContent = "Start Listening";
-        }
-
-        if (el.evaluationBox) {
-            el.evaluationBox.innerHTML =
-                `<p>Speech recognition error: ${event.error}</p>`;
+        if (event.error === "no-speech") {
+            console.warn("No speech detected. Try speaking closer to the microphone.");
+        } else if (event.error === "not-allowed") {
+            alert("Microphone permission was denied. Please allow microphone access.");
+        } else if (event.error === "network") {
+            console.error("Speech recognition network service failed.");
+        } else {
+            console.error("Recognition problem:", event.error);
         }
     };
 
@@ -76,35 +86,49 @@ if (SpeechRecognition) {
         let finalTranscript = "";
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
+
+            const transcript = event.results[i][0].transcript;
+
             if (event.results[i].isFinal) {
-                finalTranscript += event.results[i][0].transcript + " ";
+                finalTranscript += transcript + " ";
             }
         }
 
         if (finalTranscript && el.responseBox) {
             el.responseBox.value += finalTranscript;
-            updateWordCount();
+            el.responseBox.dispatchEvent(new Event("input", {
+                bubbles: true
+            }));
+
+            console.log("Recognized speech:", finalTranscript);
         }
     };
 }
 
+// ==========================================
+// LISTEN BUTTON
+// ==========================================
 
-// Listen button
 on(el.listenButton, "click", () => {
 
     if (!state.recognition) {
+        alert("Speech recognition is not supported. Please type your answer.");
+        return;
+    }
 
-        if (el.evaluationBox) {
-            el.evaluationBox.innerHTML =
-                "<p>Speech recognition is not supported by this browser. Please type your answer.</p>";
-        }
+    if (recognitionActive || recognitionStarting) {
+
+        state.recognition.stop();
 
         return;
     }
 
-    if (state.isListening) {
-        state.recognition.stop();
-    } else {
+    try {
+        recognitionStarting = true;
         state.recognition.start();
+
+    } catch (error) {
+        recognitionStarting = false;
+        console.error("Could not start speech recognition:", error);
     }
 });

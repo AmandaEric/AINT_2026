@@ -285,7 +285,18 @@ async function finishExam(timeUp = false) {
     }
 
     try {
+        // Stop recording and wait for all video uploads.
+        if (typeof finishRecordings === "function") {
+            await finishRecordings();
+        }
+    
+        // Turn off the camera and microphone.
+        if (typeof stopCamera === "function") {
+            stopCamera();
+        }
+    
         await submitExam();
+    
     } finally {
         exam.finishing = false;
     }
@@ -340,6 +351,7 @@ bindEvent(el.startButton, "click", async () => {
             
             if (response.status === 403) {
                 alert(
+                    data.error ||
                     data.message ||
                     "You have reached the maximum number of attempts for this test."
                 );
@@ -404,7 +416,16 @@ bindEvent(el.startButton, "click", async () => {
         updateTimerDisplay();
         startTimer();
         startProctoring();
-        
+        // Start camera and microphone for answer recordings.
+        if (typeof startCamera === "function") {
+            const cameraReady = await startCamera();
+
+            if (!cameraReady) {
+                console.error("Camera or microphone could not start.");
+                alert("Camera and microphone access are required for this exam.");
+            }
+        }
+                
         // Tell the Chrome extension that this exam has started.
         notifyAintExtension("START");
         document.body.classList.add("exam-active");
@@ -592,6 +613,14 @@ function askNextQuestion() {
 
     questionTextEl.textContent = picked.text;
     showQuestionImage(picked.image);
+    // Record the student's answer to this question.
+    if (typeof startAnswerRecording === "function") {
+        startAnswerRecording({
+            questionId: picked.id,
+            question: picked.text,
+            kind: "answer"
+        });
+    }
 
     if (el.responseBox) el.responseBox.disabled = false;
     if (el.listenButton) el.listenButton.disabled = false;
@@ -642,7 +671,10 @@ async function handleEvaluate() {
     }
 
     const originalQuestion = exam.current.question;
-
+    // Finish recording the original answer.
+    if (typeof stopAnswerRecording === "function") {
+        await stopAnswerRecording();
+    }
     // Save the original answer.
     recordAnswer(originalQuestion, answer);
     exam.lastRecordedAnswer = answer;
@@ -734,6 +766,13 @@ async function handleEvaluate() {
             }
 
             safeSpeak(data.followUpQuestion);
+            if (typeof startAnswerRecording === "function") {
+                startAnswerRecording({
+                    questionId: exam.current.id,
+                    question: data.followUpQuestion,
+                    kind: "followup"
+                });
+            }
 
         } else {
             followUpNeedsAnswer = false;
@@ -765,7 +804,7 @@ async function handleEvaluate() {
         }
     }
 }
-function handleFollowUpAnswer() {
+async function handleFollowUpAnswer() {
     if (!exam.current || !followUpNeedsAnswer) {
         return;
     }
@@ -787,6 +826,9 @@ function handleFollowUpAnswer() {
     if (!followUpQuestion) {
         console.error("Missing follow-up question.");
         return;
+    }
+    if (typeof stopAnswerRecording === "function") {
+        await stopAnswerRecording();
     }
 
     // Save the answer with the follow-up question, not the original.
