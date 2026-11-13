@@ -27,6 +27,10 @@
                     <input class="student-name" type="text" placeholder="Your full name">
                     <input class="test-code" type="text" placeholder="Test Code">
                     <p class="proctored-info"> This is a proctored exam. do not leave the testing area. You must accept the terms and conditions to proceed.</p>
+                    <label class="consent">
+                        <input type="checkbox" id="cameraConsent">
+                        I agree to be recorded by my camera and microphone (video and audio) while I answer questions.
+                    </label>
                 </div>
                 
                 
@@ -90,6 +94,7 @@
     <!-- Order matters: core first, main last -->
     <script src="js/core.js"></script>
     <script src="js/proctoring.js"></script>
+    <script src="js/recorder.js"></script>
     <script src="js/avatar-speech.js"></script>
     <script src="js/student-exam.js"></script>
     <script src="js/student-voice.js"></script>

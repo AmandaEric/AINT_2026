@@ -1684,7 +1684,7 @@ app.post(
 
             const attemptId = Number(req.body.attemptId);
             const timestamp = new Date(req.body.timestamp);
-
+                                                                                                                                                                                                                                                                                                                                                           
             const allowedTypes = [
                 "TAB_HIDDEN",
                 "TAB_VISIBLE",
@@ -1696,7 +1696,10 @@ app.post(
                 "UNAUTHORIZED_WEBSITE_ACTIVE",
                 "WINDOW_NOT_MAXIMIZED",
                 "WINDOW_MAXIMIZED",
-                "PAGE_RELOAD"
+                "PAGE_RELOAD",
+                "CAMERA_LOST",
+                "MIC_LOST",
+                "CAMERA_UPLOAD_FAILED",
             ];
 
             if (!allowedTypes.includes(eventType)) {
@@ -1829,6 +1832,151 @@ app.post(
         }
     }
 );
+// ==========================================
+// ANSWER RECORDINGS (camera clips)
+// ==========================================
+
+// STUDENT: upload one clip (raw video in the request body).
+app.post(
+    "/api/tests/:code/recordings",
+    rateLimit(300, 60 * 1000),
+    express.raw({ type: "video/*", limit: "15mb" }),
+    async (req, res, next) => {
+        try {
+            const code = String(req.params.code || "").trim().toUpperCase();
+            const attemptId = Number(req.query.attemptId);
+            const kind = req.query.kind === "followup" ? "followup" : "answer";
+            const questionId = Number(req.query.questionId);
+            const questionText = String(req.query.question || "").slice(0, 1000);
+            const durationMs = Math.max(0, Math.round(Number(req.query.durationMs) || 0));
+            const mime = String(req.headers["content-type"] || "").split(";")[0];
+
+            if (!Number.isInteger(attemptId) || attemptId <= 0) {
+                return badRequest(res, "A valid attempt ID is required.");
+            }
+            if (!["video/webm", "video/mp4"].includes(mime)) {
+                return badRequest(res, "Unsupported video type.");
+            }
+            if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+                return badRequest(res, "No video received.");
+            }
+
+            const [attempts] = await pool.execute(
+                `SELECT attempt_id FROM Exam_Attempts
+                  WHERE attempt_id = ? AND test_code = ? AND status = 'IN_PROGRESS'`,
+                [attemptId, code]
+            );
+            if (!attempts.length) {
+                return res.status(403).json({ success: false, error: "This exam attempt is not active." });
+            }
+
+            await pool.execute(
+                `INSERT INTO Answer_Recordings
+                    (attempt_id, test_code, question_id, question_text, kind, mime_type, duration_ms, video_data)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    attemptId, code,
+                    Number.isInteger(questionId) && questionId > 0 ? questionId : null,
+                    questionText || null, kind, mime, durationMs, req.body
+                ]
+            );
+
+            res.status(201).json({ success: true });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ADMIN: list the clips for a test (no video data).
+app.get("/api/tests/:code/recordings", requireAdmin, async (req, res, next) => {
+    try {
+        const test = await getOwnedTest(req.params.code, req.admin.Admin_id);
+        if (!test) return res.status(404).json({ success: false, error: "Test not found." });
+
+        const [rows] = await pool.execute(
+            `SELECT r.id, r.attempt_id, r.question_id, r.question_text, r.kind,
+                    r.duration_ms, r.created_at, r.viewed_at, ea.student_name
+               FROM Answer_Recordings r
+               LEFT JOIN Exam_Attempts ea ON ea.attempt_id = r.attempt_id
+              WHERE r.test_code = ?
+              ORDER BY r.attempt_id, r.id`,
+            [test.test_code]
+        );
+
+        res.json({ success: true, recordings: rows });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// ADMIN: play or download one clip. The first time it is opened starts
+// the 24-hour delete clock. ?download=1 only makes the browser save the file.
+app.get("/api/tests/:code/recordings/:id", requireAdmin, async (req, res, next) => {
+    try {
+        const test = await getOwnedTest(req.params.code, req.admin.Admin_id);
+        if (!test) return res.status(404).json({ success: false, error: "Test not found." });
+
+        const id = Number(req.params.id);
+        const [rows] = await pool.execute(
+            `SELECT mime_type, video_data, attempt_id, kind
+               FROM Answer_Recordings WHERE id = ? AND test_code = ?`,
+            [id, test.test_code]
+        );
+        if (!rows.length) return res.status(404).json({ success: false, error: "Recording not found." });
+
+        await pool.execute(
+            `UPDATE Answer_Recordings SET viewed_at = COALESCE(viewed_at, NOW()) WHERE id = ?`,
+            [id]
+        );
+
+        if (req.query.download === "1") {
+            const ext = rows[0].mime_type === "video/mp4" ? "mp4" : "webm";
+            res.setHeader(
+                "Content-Disposition",
+                `attachment; filename="attempt${rows[0].attempt_id}-${rows[0].kind}-${id}.${ext}"`
+            );
+        }
+
+        res.setHeader("Content-Type", rows[0].mime_type);
+        res.setHeader("Cache-Control", "no-store");
+        res.send(rows[0].video_data);
+    } catch (err) {
+        next(err);
+    }
+});
+
+// ADMIN: delete a clip right away.
+app.delete("/api/tests/:code/recordings/:id", requireAdmin, async (req, res, next) => {
+    try {
+        const test = await getOwnedTest(req.params.code, req.admin.Admin_id);
+        if (!test) return res.status(404).json({ success: false, error: "Test not found." });
+
+        await pool.execute(
+            `DELETE FROM Answer_Recordings WHERE id = ? AND test_code = ?`,
+            [Number(req.params.id), test.test_code]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// Delete clips 24 hours after the teacher first opened them,
+// or 60 days after recording if nobody ever opened them.
+async function deleteOldRecordings() {
+    try {
+        await pool.execute(
+            `DELETE FROM Answer_Recordings
+              WHERE (viewed_at IS NOT NULL AND viewed_at < (NOW() - INTERVAL 24 HOUR))
+                 OR created_at < (NOW() - INTERVAL 60 DAY)`
+        );
+    } catch (err) {
+        console.error("RECORDING CLEANUP ERROR:", err.message);
+    }
+}
+deleteOldRecordings();
+setInterval(deleteOldRecordings, 60 * 60 * 1000);
 
 app.use("/api", (req, res) => {
     res.status(404).json({ success: false, error: `No such route: ${req.method} ${req.originalUrl}` });
