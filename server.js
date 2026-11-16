@@ -1159,21 +1159,27 @@ app.get("/api/tests/:code/results", requireAdmin, async (req, res, next) => {
 
         const submissions = rows.map((r) => {
             let details = [];
+        
             try {
                 details = JSON.parse(r.details_json || "[]");
             } catch {
             }
+        
             return {
                 studentName: r.student_name,
+                attemptId: r.attempt_id === null
+                    ? null
+                    : Number(r.attempt_id),
                 percent: r.score_percent,
                 gradingFailed: Boolean(r.grading_failed),
                 summary: r.summary,
                 submittedAt: r.submitted_at,
                 emailSent: Boolean(r.email_sent),
-                questions: Array.isArray(details) ? details : details.questions || [],
+                questions: Array.isArray(details)
+                    ? details
+                    : details.questions || [],
             };
         });
-
         const [proctoringEvents] = await pool.execute(
             `SELECT
                 pe.id,
@@ -1526,28 +1532,65 @@ app.post("/api/tests/:code/submit", rateLimit(10, 60 * 1000), async (req, res, n
             console.error("GRADING ERROR:", err.message);
         }
 
-        const [student] = await pool.execute(`INSERT INTO Students (student_name) VALUES (?)`, [studentName]);
+        // Get the attempt ID that was created when the student started the test.
+        const rawAttemptId = Number(req.body.attemptId);
+
+        const attemptId =
+            Number.isInteger(rawAttemptId) && rawAttemptId > 0
+                ? rawAttemptId
+                : null;
+
+        // Save the student.
+        const [student] = await pool.execute(
+            `INSERT INTO Students (student_name)
+            VALUES (?)`,
+            [studentName]
+        );
+
+        // Save the score AND the attempt ID.
         const [score] = await pool.execute(
             `INSERT INTO Test_Scores
-         (Test_id, Students_id, score_percent, grading_failed, summary, duration_seconds, details_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [test.id, student.insertId, percent, gradingFailed, summary, durationSeconds, JSON.stringify(details)]
+                (
+                    Test_id,
+                    Students_id,
+                    attempt_id,
+                    score_percent,
+                    grading_failed,
+                    summary,
+                    duration_seconds,
+                    details_json
+                )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                test.id,
+                student.insertId,
+                attemptId,
+                percent,
+                gradingFailed,
+                summary,
+                durationSeconds,
+                JSON.stringify(details)
+            ]
         );
 
         // Mark this specific attempt as submitted. A logging problem must not
         // prevent the student's answers and score from being saved.
+        // Mark this specific attempt as submitted.
         try {
-            const attemptId = Number(req.body.attemptId);
-
-            if (Number.isInteger(attemptId) && attemptId > 0) {
+            if (attemptId !== null) {
                 await pool.execute(
                     `UPDATE Exam_Attempts
-                        SET submitted_at = UTC_TIMESTAMP(), status = 'SUBMITTED'
-                      WHERE attempt_id = ?
+                        SET submitted_at = UTC_TIMESTAMP(),
+                            status = 'SUBMITTED'
+                    WHERE attempt_id = ?
                         AND test_code = ?
                         AND student_name = ?
                         AND status = 'IN_PROGRESS'`,
-                    [attemptId, String(req.params.code).toUpperCase(), studentName]
+                    [
+                        attemptId,
+                        String(req.params.code).toUpperCase(),
+                        studentName
+                    ]
                 );
             }
         } catch (err) {

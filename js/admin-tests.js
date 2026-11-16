@@ -1306,73 +1306,324 @@
     /* ----------------------------------------------------------
        RESULTS
        ---------------------------------------------------------- */
+    // Fetch a recording using the admin's authorization token.
+        async function fetchRecording(code, recordingId, download = false) {
+            const downloadQuery = download ? "?download=1" : "";
 
-    async function loadResults(code) {
-        const container = $("resultsList");
-
-        if (!container) return;
-
-        container.textContent = "Loading results...";
-
-        try {
-            const data = await api(
-                `/api/tests/${encodeURIComponent(code)}/results`
+            const response = await fetch(
+                `${API}/api/tests/${encodeURIComponent(code)}/recordings/${recordingId}${downloadQuery}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${getToken()}`
+                    }
+                }
             );
 
-            container.replaceChildren();
+            if (!response.ok) {
+                let message = "Could not load recording.";
 
-            const heading = document.createElement("h3");
-            heading.textContent = `Results: ${data.name || data.code}`;
+                try {
+                    const data = await response.json();
+                    message = data.error || message;
+                } catch {
+                }
 
-            container.appendChild(heading);
-
-            if (!data.submissions.length) {
-                const empty = document.createElement("p");
-                empty.textContent = "No student submissions yet.";
-
-                container.appendChild(empty);
-                return;
+                throw new Error(message);
             }
 
-            data.submissions.forEach((submission) => {
-                const card = document.createElement("div");
-                card.className = "result-card";
-
-                const title = document.createElement("h4");
-                title.textContent = submission.studentName;
-
-                const score = document.createElement("p");
-
-                score.textContent = submission.gradingFailed
-                    ? "Grading failed; answers were saved."
-                    : `Score: ${submission.percent}%`;
-
-                const summary = document.createElement("p");
-                summary.textContent = submission.summary || "";
-
-                card.append(title, score, summary);
-
-                (submission.questions || []).forEach((q, index) => {
-                    const question = document.createElement("p");
-
-                    question.textContent =
-                        `${index + 1}. ${q.question || ""}` +
-                        (q.score !== undefined
-                            ? ` — ${q.score}/${q.maxPoints || DEFAULT_POINTS}`
-                            : "") +
-                        (q.feedback ? ` | ${q.feedback}` : "");
-
-                    card.appendChild(question);
-                });
-
-                container.appendChild(card);
-            });
-        } catch (error) {
-            container.textContent =
-                `Could not load results: ${error.message}`;
+            return await response.blob();
         }
-    }
 
+
+        // Display Play and Download buttons for one recording.
+        function renderRecording(recording, code, container) {
+            const item = document.createElement("div");
+            item.className = "recording-item";
+
+            const description = document.createElement("p");
+
+            description.textContent =
+                `${recording.kind || "Video"} recording` +
+                ` — ${Math.round((recording.duration_ms || 0) / 1000)} seconds`;
+
+            const videoContainer = document.createElement("div");
+
+            const playButton = makeButton("Play Recording", "", async () => {
+                playButton.disabled = true;
+                playButton.textContent = "Loading...";
+
+                try {
+                    const blob = await fetchRecording(
+                        code,
+                        recording.id
+                    );
+
+                    const videoUrl = URL.createObjectURL(blob);
+
+                    const video = document.createElement("video");
+                    video.controls = true;
+                    video.preload = "metadata";
+                    video.src = videoUrl;
+                    video.style.display = "block";
+                    video.style.width = "100%";
+                    video.style.maxWidth = "600px";
+                    video.style.marginTop = "10px";
+
+                    videoContainer.replaceChildren(video);
+
+                    await video.play();
+
+                    playButton.textContent = "Play Again";
+                } catch (error) {
+                    alert(`Could not play recording: ${error.message}`);
+                    playButton.textContent = "Play Recording";
+                } finally {
+                    playButton.disabled = false;
+                }
+            });
+
+            const downloadButton = makeButton("Download", "", async () => {
+                downloadButton.disabled = true;
+
+                try {
+                    const blob = await fetchRecording(
+                        code,
+                        recording.id,
+                        true
+                    );
+
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+
+                    link.href = url;
+                    link.download =
+                        `AINT-recording-${recording.id}.${blob.type.includes("mp4") ? "mp4" : "webm"}`;
+
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+
+                    URL.revokeObjectURL(url);
+                } catch (error) {
+                    alert(`Could not download recording: ${error.message}`);
+                } finally {
+                    downloadButton.disabled = false;
+                }
+            });
+
+            item.append(
+                description,
+                playButton,
+                downloadButton,
+                videoContainer
+            );
+
+            container.appendChild(item);
+        }
+        async function loadResults(code) {
+            const container = $("resultsList");
+        
+            if (!container) return;
+        
+            container.textContent = "Loading results...";
+        
+            try {
+                // Load the scores.
+                const data = await api(
+                    `/api/tests/${encodeURIComponent(code)}/results`
+                );
+        
+                // Load recording information.
+                // The video files themselves are loaded only when Play is clicked.
+                let recordings = [];
+                let recordingError = "";
+        
+                try {
+                    const recordingData = await api(
+                        `/api/tests/${encodeURIComponent(code)}/recordings`
+                    );
+        
+                    recordings = recordingData.recordings || [];
+                } catch (error) {
+                    recordingError = error.message;
+                }
+        
+                container.replaceChildren();
+        
+                const heading = document.createElement("h3");
+                heading.textContent = `Results: ${data.name || data.code}`;
+        
+                container.appendChild(heading);
+        
+                if (recordingError) {
+                    const warning = document.createElement("p");
+                    warning.textContent =
+                        `Could not load recordings: ${recordingError}`;
+                    warning.style.color = "#c62828";
+        
+                    container.appendChild(warning);
+                }
+        
+                if (!data.submissions.length) {
+                    const empty = document.createElement("p");
+                    empty.textContent = "No student submissions yet.";
+        
+                    container.appendChild(empty);
+                    return;
+                }
+        
+                // Group recordings by exam attempt.
+                const recordingsByAttempt = new Map();
+        
+                recordings.forEach((recording) => {
+                    const attemptId = Number(recording.attempt_id);
+        
+                    if (!Number.isInteger(attemptId)) return;
+        
+                    if (!recordingsByAttempt.has(attemptId)) {
+                        recordingsByAttempt.set(attemptId, []);
+                    }
+        
+                    recordingsByAttempt.get(attemptId).push(recording);
+                });
+        
+                // Keep track of recordings connected to a submission.
+                const matchedRecordingIds = new Set();
+        
+                data.submissions.forEach((submission) => {
+                    const card = document.createElement("div");
+                    card.className = "result-card";
+        
+                    const title = document.createElement("h4");
+                    title.textContent = submission.studentName || "Unknown student";
+        
+                    const score = document.createElement("p");
+        
+                    score.textContent = submission.gradingFailed
+                        ? "Grading failed; answers were saved."
+                        : `Score: ${submission.percent}%`;
+        
+                    const summary = document.createElement("p");
+                    summary.textContent = submission.summary || "";
+        
+                    card.append(title, score, summary);
+        
+                    // Find recordings for this exact attempt.
+                    const studentRecordings = submission.attemptId
+                        ? recordingsByAttempt.get(Number(submission.attemptId)) || []
+                        : [];
+        
+                    // Show each question and its matching recordings.
+                    (submission.questions || []).forEach((q, index) => {
+                        const questionSection = document.createElement("div");
+                        questionSection.className = "result-question";
+        
+                        const question = document.createElement("p");
+        
+                        question.textContent =
+                            `${index + 1}. ${q.question || ""}` +
+                            (q.score !== undefined
+                                ? ` — ${q.score}/${q.maxPoints || DEFAULT_POINTS}`
+                                : "") +
+                            (q.feedback ? ` | ${q.feedback}` : "");
+        
+                        questionSection.appendChild(question);
+        
+                        // Match the recording to the question text.
+                        const normalize = (value) =>
+                            String(value || "").trim().toLowerCase();
+        
+                        const questionRecordings = studentRecordings.filter(
+                            (recording) =>
+                                normalize(recording.question_text) ===
+                                normalize(q.question)
+                        );
+        
+                        if (questionRecordings.length > 0) {
+                            const recordingHeading = document.createElement("strong");
+                            recordingHeading.textContent = "Question recordings:";
+        
+                            questionSection.appendChild(recordingHeading);
+        
+                            questionRecordings.forEach((recording) => {
+                                matchedRecordingIds.add(recording.id);
+        
+                                renderRecording(
+                                    recording,
+                                    code,
+                                    questionSection
+                                );
+                            });
+                        }
+        
+                        card.appendChild(questionSection);
+                    });
+        
+                    // Show ALL recordings for this student's attempt.
+                    const allRecordingsHeading = document.createElement("h4");
+                    allRecordingsHeading.textContent = "All Recordings";
+        
+                    card.appendChild(allRecordingsHeading);
+        
+                    if (studentRecordings.length === 0) {
+                        const empty = document.createElement("p");
+                        empty.textContent =
+                            "No recordings found for this attempt.";
+        
+                        card.appendChild(empty);
+                    } else {
+                        studentRecordings.forEach((recording) => {
+                            matchedRecordingIds.add(recording.id);
+        
+                            renderRecording(
+                                recording,
+                                code,
+                                card
+                            );
+                        });
+                    }
+        
+                    container.appendChild(card);
+                });
+        
+                // Show recordings that could not be matched to a score.
+                const unmatchedRecordings = recordings.filter(
+                    (recording) => !matchedRecordingIds.has(recording.id)
+                );
+        
+                if (unmatchedRecordings.length > 0) {
+                    const unmatchedSection = document.createElement("div");
+        
+                    const unmatchedHeading = document.createElement("h3");
+                    unmatchedHeading.textContent =
+                        "Other Recordings (Not Matched to a Submission)";
+        
+                    unmatchedSection.appendChild(unmatchedHeading);
+        
+                    unmatchedRecordings.forEach((recording) => {
+                        const label = document.createElement("p");
+        
+                        label.textContent =
+                            `${recording.student_name || "Unknown student"} — ` +
+                            `Attempt ${recording.attempt_id}`;
+        
+                        unmatchedSection.appendChild(label);
+        
+                        renderRecording(
+                            recording,
+                            code,
+                            unmatchedSection
+                        );
+                    });
+        
+                    container.appendChild(unmatchedSection);
+                }
+        
+            } catch (error) {
+                container.textContent =
+                    `Could not load results: ${error.message}`;
+            }
+        }
     /* ----------------------------------------------------------
        NAVIGATION
        ---------------------------------------------------------- */
