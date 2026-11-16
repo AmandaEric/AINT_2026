@@ -422,13 +422,19 @@ p2{
 #ai-avatar {
     transition: opacity 0.05s ease-in-out;
 }
-.resultsList{
-    width: 100%;
-    max-width: 1000px;
-    margin: 20px auto;
-    padding: 0 20px;
+#resultsList {
+    width: calc(100% - 40px);
+    max-width: 1050px;
+    margin: 25px auto 40px;
+    padding: 25px;
     text-align: left;
+
+    background-color: #ffffff;
+    border: 2px solid #4db6ac;
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10);
 }
+
 
 /* =========================
    MOBILE
