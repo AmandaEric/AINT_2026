@@ -410,7 +410,7 @@ p2{
     width: 30px;
     font-size: 10px;
     color: #555;
-    margin: 2px 0;
+    margin: 2px;
 }
 [hidden] {
     display: none !important;
@@ -421,6 +421,13 @@ p2{
 }
 #ai-avatar {
     transition: opacity 0.05s ease-in-out;
+}
+.resultsList{
+    width: 100%;
+    max-width: 1000px;
+    margin: 20px auto;
+    padding: 0 20px;
+    text-align: left;
 }
 
 /* =========================
