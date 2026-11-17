@@ -655,6 +655,7 @@ function addEvaluationLine(tag, text, label) {
 }
 
 
+
 async function handleEvaluate() {
     if (!exam.current || followUpNeedsAnswer) {
         return;
@@ -663,24 +664,24 @@ async function handleEvaluate() {
     const answer = el.responseBox ? el.responseBox.value.trim() : "";
 
     if (!answer) {
-        if (el.evaluationBox) {
-            el.evaluationBox.innerHTML =
-                "<p>Please provide an answer before evaluating.</p>";
-        }
+        alert("Please provide an answer before continuing.");
         return;
     }
 
     const originalQuestion = exam.current.question;
+
     // Finish recording the original answer.
     if (typeof stopAnswerRecording === "function") {
         await stopAnswerRecording();
     }
+
     // Save the original answer.
     recordAnswer(originalQuestion, answer);
     exam.lastRecordedAnswer = answer;
 
+    // Keep the evaluation hidden from the student.
     if (el.evaluationBox) {
-        el.evaluationBox.innerHTML = "<p>AI is thinking...</p>";
+        el.evaluationBox.innerHTML = "";
     }
 
     if (el.evaluateButton) {
@@ -709,44 +710,17 @@ async function handleEvaluate() {
 
         const data = await response.json();
 
-        const feedback = data.evaluation || "";
         const hasFollowUp =
             Boolean(data.needsFollowUp && data.followUpQuestion);
-
-        if (el.evaluationBox) {
-            el.evaluationBox.innerHTML = "";
-        }
-
-        addEvaluationLine(
-            "h4",
-            hasFollowUp ? "Follow-up Question" : "AI Evaluation"
-        );
-
-        if (feedback) {
-            addEvaluationLine("p", feedback);
-        }
-
-        if (data.score !== undefined && data.score !== null) {
-            addEvaluationLine(
-                "p",
-                `${data.score} / ${data.maxPoints}`,
-                "Preliminary Score:"
-            );
-        }
 
         if (hasFollowUp) {
             followUpNeedsAnswer = true;
             setQuestionButtonsEnabled(false);
 
-            // Remember that the next answer belongs to this follow-up.
+            // Save the follow-up question.
             exam.current.pendingFollowUp = data.followUpQuestion;
 
-            // addEvaluationLine(
-            //     "p",
-            //     data.followUpQuestion,
-            //     "Follow-up:"
-            // );
-
+            // Display ONLY the follow-up question.
             if (el.questionText) {
                 el.questionText.textContent = data.followUpQuestion;
             }
@@ -766,6 +740,7 @@ async function handleEvaluate() {
             }
 
             safeSpeak(data.followUpQuestion);
+
             if (typeof startAnswerRecording === "function") {
                 startAnswerRecording({
                     questionId: exam.current.id,
@@ -778,25 +753,17 @@ async function handleEvaluate() {
             followUpNeedsAnswer = false;
             exam.current.pendingFollowUp = null;
 
+            // No follow-up is needed. Let the student continue.
             awaitingNext = true;
             setEvaluateLabel();
-
-            addEvaluationLine(
-                "p",
-                "No follow-up question is needed. Click Next Question to continue."
-            );
         }
 
     } catch (error) {
         console.error("AI ERROR:", error);
 
-        if (el.evaluationBox) {
-            el.evaluationBox.innerHTML = `
-                <h4>AI Connection Error</h4>
-                <p>The AI could not evaluate your answer.
-                Please try again.</p>
-            `;
-        }
+        alert(
+            "The AI could not evaluate your answer. Please try again."
+        );
 
     } finally {
         if (el.evaluateButton) {
@@ -804,6 +771,8 @@ async function handleEvaluate() {
         }
     }
 }
+
+
 async function handleFollowUpAnswer() {
     if (!exam.current || !followUpNeedsAnswer) {
         return;
@@ -814,10 +783,7 @@ async function handleFollowUpAnswer() {
         : "";
 
     if (!answer) {
-        if (el.evaluationBox) {
-            el.evaluationBox.innerHTML +=
-                "<p>Please answer the follow-up question.</p>";
-        }
+        alert("Please answer the follow-up question.");
         return;
     }
 
@@ -827,28 +793,28 @@ async function handleFollowUpAnswer() {
         console.error("Missing follow-up question.");
         return;
     }
+
     if (typeof stopAnswerRecording === "function") {
         await stopAnswerRecording();
     }
 
-    // Save the answer with the follow-up question, not the original.
+    // Save the answer with the follow-up question.
     recordAnswer(followUpQuestion, answer);
 
     exam.current.pendingFollowUp = null;
     followUpNeedsAnswer = false;
     exam.lastRecordedAnswer = null;
 
-    // Restore the original question on the screen.
+    // Restore the original question.
     if (el.questionText) {
         el.questionText.textContent = exam.current.question;
     }
 
     clearResponseBox();
 
+    // Clear any previous messages.
     if (el.evaluationBox) {
-        el.evaluationBox.innerHTML +=
-            "<p>Follow-up answer saved!</p>" +
-            "<p>You may continue to the next question.</p>";
+        el.evaluationBox.innerHTML = "";
     }
 
     awaitingNext = true;
@@ -858,6 +824,7 @@ async function handleFollowUpAnswer() {
         el.evaluateButton.disabled = false;
     }
 }
+
 bindEvent(el.evaluateButton, "click", () => {
     if (awaitingNext) {
         askNextQuestion();
