@@ -446,6 +446,8 @@ p2{
 #ai-avatar {
     transition: opacity 0.05s ease-in-out;
 }
+
+/* Overall results container */
 #resultsList {
     width: calc(100% - 40px);
     max-width: 1050px;
@@ -458,6 +460,53 @@ p2{
     border-radius: 16px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10);
 }
+
+/* Individual student attempt */
+.result-card {
+    background: #ffffff;
+    border: 1px solid #d8e4e2;
+    border-left: 5px solid #4db6ac;
+    border-radius: 10px;
+
+    padding: 22px;
+    margin: 28px 0;
+
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* Student name */
+.result-card > h4:first-child {
+    font-size: 19px;
+    margin-top: 0;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #e5eeec;
+}
+
+/* Questions */
+.result-card .result-question {
+    border-bottom: 1px solid #e5e5e5;
+    padding: 14px 0;
+    margin-bottom: 10px;
+}
+
+/* Proctoring report */
+.result-card .proctoring-report {
+    background: #f5f9f8;
+    border: 1px solid #dce9e6;
+    border-radius: 8px;
+    padding: 14px;
+    margin: 18px 0;
+}
+
+/* Recording section */
+.result-card > h4:not(:first-child) {
+    border-top: 1px solid #e5e5e5;
+    padding-top: 16px;
+    margin-top: 20px;
+}
+
+
 
 
 /* =========================
