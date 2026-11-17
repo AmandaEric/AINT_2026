@@ -88,6 +88,11 @@ footer {
     max-width: 200px;
     margin: 10px auto;
 }
+.proctored-info {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.4;
+}
 
 .exam-info input {
     width: 90%;              
@@ -95,11 +100,30 @@ footer {
     box-sizing: border-box;   
     font-size: 1rem;
 }
+.exam-info input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    padding: 0;
+    margin: 2px 0 0;
+    accent-color: #4db6ac;
+}
 
 .test-code {
     text-transform: uppercase;
     letter-spacing: 2px;
     text-align: center;
+}
+.consent {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    font-size: 13px;
+    line-height: 1.4;
+    font-family: Arial, sans-serif;
+    color: #2f2f2f;
+    cursor: pointer;
 }
 
 .student-name {

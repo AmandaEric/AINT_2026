@@ -1451,6 +1451,168 @@
 
             container.appendChild(item);
         }
+
+        function interpretProctoringEvent(event) {
+            const interpretations = {
+                WINDOW_BLUR: {
+                    title: "Exam window lost focus",
+                    description: "The exam window lost focus. The student may have interacted with another application.",
+                    severity: "review"
+                },
+                TAB_HIDDEN: {
+                    title: "Exam tab hidden",
+                    description: "The exam tab became hidden or the student navigated away from it.",
+                    severity: "review"
+                },
+                UNAUTHORIZED_TAB_OPENED: {
+                    title: "Unauthorized tab opened",
+                    description: "A browser tab was opened that was not on the approved website list.",
+                    severity: "review"
+                },
+                UNAUTHORIZED_TAB_SWITCHED: {
+                    title: "Unauthorized tab switch",
+                    description: "The student switched to a browser tab that was not approved for this exam.",
+                    severity: "review"
+                },
+                UNAUTHORIZED_WEBSITE_ACTIVE: {
+                    title: "Unauthorized website active",
+                    description: "The student accessed a website that was not approved for this exam.",
+                    severity: "review"
+                },
+                FULLSCREEN_EXIT: {
+                    title: "Fullscreen exited",
+                    description: "The student exited the required fullscreen exam environment.",
+                    severity: "review"
+                },
+                PAGE_RELOAD: {
+                    title: "Exam page reloaded",
+                    description: "The exam page was refreshed or reloaded during the attempt.",
+                    severity: "review"
+                },
+                WINDOW_NOT_MAXIMIZED: {
+                    title: "Browser not maximized",
+                    description: "The browser window was not maximized.",
+                    severity: "review"
+                },
+                CAMERA_LOST: {
+                    title: "Camera connection interrupted",
+                    description: "The camera connection was interrupted during the exam.",
+                    severity: "technical"
+                },
+                MIC_LOST: {
+                    title: "Microphone connection interrupted",
+                    description: "The microphone connection was interrupted during the exam.",
+                    severity: "technical"
+                },
+                CAMERA_UPLOAD_FAILED: {
+                    title: "Recording upload failed",
+                    description: "A camera or microphone recording could not be uploaded successfully.",
+                    severity: "technical"
+                },
+                WINDOW_FOCUS: {
+                    title: "Student returned to exam window",
+                    description: "The exam window regained focus.",
+                    severity: "context"
+                },
+                TAB_VISIBLE: {
+                    title: "Student returned to exam tab",
+                    description: "The exam tab became visible again.",
+                    severity: "context"
+                },
+                WINDOW_MAXIMIZED: {
+                    title: "Browser maximized",
+                    description: "The browser window was maximized.",
+                    severity: "context"
+                }
+            };
+
+            const result = interpretations[event.event_type] || {
+                title: event.event_type || "Unknown event",
+                description: "An unrecognized proctoring event was recorded.",
+                severity: "technical"
+            };
+
+            return {
+                ...event,
+                ...result
+            };
+        }
+
+
+        // Display interpreted proctoring events for one exam attempt.
+        function renderProctoringReport(events, container) {
+            const section = document.createElement("div");
+            section.className = "proctoring-report";
+
+            const heading = document.createElement("h4");
+            heading.textContent = "Proctoring Event Report";
+            section.appendChild(heading);
+
+            if (!events || events.length === 0) {
+                const empty = document.createElement("p");
+                empty.textContent = "No proctoring events were recorded for this attempt.";
+                section.appendChild(empty);
+                container.appendChild(section);
+                return;
+            }
+
+            const reviewCount = events.filter(
+                event => event.severity === "review"
+            ).length;
+
+            const technicalCount = events.filter(
+                event => event.severity === "technical"
+            ).length;
+
+            const summary = document.createElement("p");
+            summary.textContent =
+                `${reviewCount} event(s) requiring review | ` +
+                `${technicalCount} technical event(s)`;
+            section.appendChild(summary);
+
+            const list = document.createElement("div");
+            list.className = "proctoring-event-list";
+
+            events.forEach((event) => {
+                const item = document.createElement("div");
+                item.className = `proctoring-event ${event.severity || "technical"}`;
+
+                const title = document.createElement("strong");
+                title.textContent = event.title || event.event_type || "Unknown event";
+
+                const description = document.createElement("p");
+                description.textContent =
+                    event.description || "No additional explanation is available.";
+
+                const time = document.createElement("small");
+                const parsedTime = new Date(event.event_timestamp);
+
+                time.textContent = Number.isNaN(parsedTime.getTime())
+                    ? String(event.event_timestamp || "Time unavailable")
+                    : parsedTime.toLocaleString();
+
+                item.append(title, description, time);
+
+                if (event.details) {
+                    const details = document.createElement("p");
+                    details.textContent = `Recorded details: ${event.details}`;
+                    item.appendChild(details);
+                }
+
+                list.appendChild(item);
+            });
+
+            section.appendChild(list);
+
+            const disclaimer = document.createElement("p");
+            disclaimer.className = "proctoring-disclaimer";
+            disclaimer.textContent =
+                "Proctoring events are indicators for review and do not independently prove academic dishonesty.";
+
+            section.appendChild(disclaimer);
+            container.appendChild(section);
+        }
+
         async function loadResults(code) {
             const container = $("resultsList");
         
@@ -1538,7 +1700,21 @@
                     summary.textContent = submission.summary || "";
         
                     card.append(title, score, summary);
-        
+                    
+                    // Show only events belonging to this exact exam attempt.
+
+                    const attemptEvents = (data.proctoringEvents || [])
+                        .filter(
+                            event =>
+                                submission.attemptId !== null &&
+                                submission.attemptId !== undefined &&
+                                Number(event.attempt_id) === Number(submission.attemptId)
+                        )
+                        .map(interpretProctoringEvent);
+                
+                    renderProctoringReport(attemptEvents, card);
+                
+
                     // Find recordings for this exact attempt.
                     const studentRecordings = submission.attemptId
                         ? recordingsByAttempt.get(Number(submission.attemptId)) || []

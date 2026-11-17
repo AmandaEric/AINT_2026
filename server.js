@@ -1247,28 +1247,35 @@ app.patch("/api/tests/:code", requireAdmin, async (req, res, next) => {
     }
 });
 
+
 app.get("/api/tests/:code/results", requireAdmin, async (req, res, next) => {
     try {
         const test = await getOwnedTest(req.params.code, req.admin.Admin_id);
-        if (!test) return res.status(404).json({ success: false, error: "Test not found." });
+
+        if (!test) {
+            return res.status(404).json({
+                success: false,
+                error: "Test not found."
+            });
+        }
 
         const [rows] = await pool.execute(
             `SELECT s.*, st.student_name
-         FROM Test_Scores s
-         JOIN Students st ON st.Students_id = s.Students_id
-        WHERE s.Test_id = ?
-        ORDER BY s.submitted_at DESC`,
+             FROM Test_Scores s
+             JOIN Students st ON st.Students_id = s.Students_id
+             WHERE s.Test_id = ?
+             ORDER BY s.submitted_at DESC`,
             [test.id]
         );
 
         const submissions = rows.map((r) => {
             let details = [];
-        
+
             try {
                 details = JSON.parse(r.details_json || "[]");
             } catch {
             }
-        
+
             return {
                 studentName: r.student_name,
                 attemptId: r.attempt_id === null
@@ -1284,6 +1291,7 @@ app.get("/api/tests/:code/results", requireAdmin, async (req, res, next) => {
                     : details.questions || [],
             };
         });
+
         const [proctoringEvents] = await pool.execute(
             `SELECT
                 pe.id,
@@ -1296,21 +1304,32 @@ app.get("/api/tests/:code/results", requireAdmin, async (req, res, next) => {
              LEFT JOIN Exam_Attempts ea
                 ON ea.attempt_id = pe.attempt_id
              WHERE pe.exam_code = ?
-             ORDER BY pe.id DESC`,
+             ORDER BY pe.event_timestamp ASC`,
             [test.test_code]
         );
-        
+
+        const interpretedEvents = proctoringEvents.map(
+            interpretProctoringEvent
+        );
+
+        const proctoringIncidents = groupProctoringIncidents(
+            proctoringEvents
+        );
+
         res.json({
             success: true,
             name: test.test_name || "",
             code: test.test_code,
             submissions,
-            proctoringEvents
+            proctoringEvents: interpretedEvents,
+            proctoringIncidents
         });
+
     } catch (err) {
         next(err);
     }
 });
+
 
 // Test codes are short, so limit how fast they can be guessed
 
@@ -1471,6 +1490,147 @@ function escapeHtml(text) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
 }
+
+// ==========================================
+// PROCTORING EVENT INTERPRETATIONS
+// ==========================================
+
+function interpretProctoringEvent(event) {
+    const interpretations = {
+        WINDOW_BLUR: {
+            title: "Window lost focus",
+            description: "The exam window lost focus. The student may have interacted with another application.",
+            severity: "review"
+        },
+        TAB_HIDDEN: {
+            title: "Exam tab hidden",
+            description: "The exam tab became hidden or the student navigated away from it.",
+            severity: "review"
+        },
+        UNAUTHORIZED_TAB_OPENED: {
+            title: "Unauthorized tab detected",
+            description: "A browser tab was opened that was not on the approved website list.",
+            severity: "review"
+        },
+        UNAUTHORIZED_TAB_SWITCHED: {
+            title: "Unauthorized tab switch",
+            description: "The student switched to a browser tab that was not approved for this exam.",
+            severity: "review"
+        },
+        UNAUTHORIZED_WEBSITE_ACTIVE: {
+            title: "Unauthorized website active",
+            description: "The student accessed a website that was not approved for this exam.",
+            severity: "review"
+        },
+        FULLSCREEN_EXIT: {
+            title: "Fullscreen exited",
+            description: "The student exited the required fullscreen exam environment.",
+            severity: "review"
+        },
+        PAGE_RELOAD: {
+            title: "Exam page reloaded",
+            description: "The exam page was refreshed or reloaded during the attempt.",
+            severity: "review"
+        },
+        WINDOW_NOT_MAXIMIZED: {
+            title: "Browser not maximized",
+            description: "The browser window was not maximized.",
+            severity: "review"
+        },
+        CAMERA_LOST: {
+            title: "Camera connection interrupted",
+            description: "The camera connection was interrupted during the exam.",
+            severity: "technical"
+        },
+        MIC_LOST: {
+            title: "Microphone connection interrupted",
+            description: "The microphone connection was interrupted during the exam.",
+            severity: "technical"
+        },
+        CAMERA_UPLOAD_FAILED: {
+            title: "Recording upload failed",
+            description: "A camera or microphone recording could not be uploaded successfully.",
+            severity: "technical"
+        },
+        WINDOW_FOCUS: {
+            title: "Student returned to exam window",
+            description: "The exam window regained focus.",
+            severity: "context"
+        },
+        TAB_VISIBLE: {
+            title: "Student returned to exam tab",
+            description: "The exam tab became visible again.",
+            severity: "context"
+        },
+        WINDOW_MAXIMIZED: {
+            title: "Browser maximized",
+            description: "The browser window was maximized.",
+            severity: "context"
+        }
+    };
+
+    const interpretation = interpretations[event.event_type] || {
+        title: String(event.event_type || "Unknown event"),
+        description: "An unrecognized proctoring event was recorded.",
+        severity: "technical"
+    };
+
+    return {
+        ...event,
+        ...interpretation
+    };
+}
+
+// Group related events from the same attempt into incidents.
+// Events occurring within two minutes belong to the same incident.
+function groupProctoringIncidents(events) {
+    const sorted = [...events]
+        .map(interpretProctoringEvent)
+        .sort((a, b) =>
+            new Date(a.event_timestamp) - new Date(b.event_timestamp)
+        );
+
+    const incidents = [];
+
+    for (const event of sorted) {
+        const previous = incidents[incidents.length - 1];
+
+        const eventTime = new Date(event.event_timestamp).getTime();
+        const previousTime = previous
+            ? new Date(previous.events[previous.events.length - 1].event_timestamp).getTime()
+            : null;
+
+        const sameAttempt =
+            previous &&
+            String(previous.attemptId ?? "") === String(event.attempt_id ?? "");
+
+        const withinTwoMinutes =
+            previous &&
+            eventTime - previousTime <= 2 * 60 * 1000;
+
+        if (sameAttempt && withinTwoMinutes) {
+            previous.events.push(event);
+        } else {
+            incidents.push({
+                attemptId: event.attempt_id ?? null,
+                studentName: event.student_name || "Unknown student",
+                events: [event]
+            });
+        }
+    }
+
+    return incidents.map((incident, index) => ({
+        ...incident,
+        incidentNumber: index + 1,
+        reviewCount: incident.events.filter(
+            event => event.severity === "review"
+        ).length,
+        technicalCount: incident.events.filter(
+            event => event.severity === "technical"
+        ).length
+    }));
+}
+
 
 const CATEGORY_RULES = {
     objective:
