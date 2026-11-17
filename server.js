@@ -910,6 +910,110 @@ app.get("/api/admin/tests", requireAdmin, async (req, res, next) => {
     }
 });
 
+// Permanently delete a test and all of its related data.
+app.delete("/api/tests/:code", requireAdmin, async (req, res, next) => {
+    let conn;
+
+    try {
+        // Verify that this test belongs to the logged-in admin.
+        const test = await getOwnedTest(
+            req.params.code,
+            req.admin.Admin_id
+        );
+
+        if (!test) {
+            return res.status(404).json({
+                success: false,
+                error: "Test not found."
+            });
+        }
+
+        conn = await pool.getConnection();
+
+        try {
+            await conn.beginTransaction();
+
+            // Delete files attached to this test's questions.
+            await conn.execute(
+                `DELETE FROM Question_Attachments
+                 WHERE Question_id IN (
+                     SELECT Question_id
+                     FROM questions
+                     WHERE Test_id = ?
+                 )`,
+                [test.id]
+            );
+
+            // Delete images and recordings.
+            await conn.execute(
+                `DELETE FROM Answer_Images WHERE Test_id = ?`,
+                [test.id]
+            );
+
+            await conn.execute(
+                `DELETE FROM Answer_Recordings WHERE test_code = ?`,
+                [test.test_code]
+            );
+
+            // Delete proctoring events and student attempts.
+            await conn.execute(
+                `DELETE FROM Proctoring_Events WHERE exam_code = ?`,
+                [test.test_code]
+            );
+
+            await conn.execute(
+                `DELETE FROM Exam_Attempts WHERE test_code = ?`,
+                [test.test_code]
+            );
+
+            // Delete grades and uploaded reading materials.
+            await conn.execute(
+                `DELETE FROM Test_Scores WHERE Test_id = ?`,
+                [test.id]
+            );
+
+            await conn.execute(
+                `DELETE FROM Test_Reading_Materials WHERE test_code = ?`,
+                [test.test_code]
+            );
+
+            // Delete approved websites and questions.
+            await conn.execute(
+                `DELETE FROM Allowed_Tabs WHERE test_id = ?`,
+                [test.id]
+            );
+
+            await conn.execute(
+                `DELETE FROM questions WHERE Test_id = ?`,
+                [test.id]
+            );
+
+            // Finally, delete the test itself.
+            await conn.execute(
+                `DELETE FROM tests WHERE id = ? AND admin_id = ?`,
+                [test.id, req.admin.Admin_id]
+            );
+
+            await conn.commit();
+
+            res.json({
+                success: true,
+                message: "Test and all related data deleted."
+            });
+
+        } catch (err) {
+            await conn.rollback();
+            throw err;
+        } finally {
+            conn.release();
+        }
+
+    } catch (err) {
+        next(err);
+    }
+});
+
+
 app.get("/api/tests/:code/edit", requireAdmin, async (req, res, next) => {
     try {
         const test = await getOwnedTest(req.params.code, req.admin.Admin_id);

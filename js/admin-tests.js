@@ -1119,11 +1119,42 @@
                     }
                 );
 
+                const deleteButton = makeButton("Delete Test", "delete-test", async () => {
+                    const confirmed = confirm(
+                        `Are you sure you want to permanently delete "${test.name}" (${test.code})?\n\n` +
+                        "This will delete ALL student attempts, grades, recordings, " +
+                        "proctoring events, questions, and uploaded materials.\n\n" +
+                        "This cannot be undone."
+                    );
+
+                    if (!confirmed) return;
+
+                    deleteButton.disabled = true;
+                    deleteButton.textContent = "Deleting...";
+
+                    try {
+                        await api(`/api/tests/${encodeURIComponent(test.code)}`, {
+                            method: "DELETE"
+                        });
+
+                        alert(`Test "${test.name}" was successfully deleted.`);
+
+                        await loadTests();
+
+                    } catch (error) {
+                        alert(`Could not delete test: ${error.message}`);
+                        deleteButton.disabled = false;
+                        deleteButton.textContent = "Delete Test";
+                    }
+                });
+
+
                 card.append(
                     heading,
                     details,
                     editButton,
-                    resultsButton
+                    resultsButton,
+                    deleteButton
                 );
 
                 container.appendChild(card);
