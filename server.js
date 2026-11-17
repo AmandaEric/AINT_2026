@@ -933,22 +933,22 @@ app.delete("/api/tests/:code", requireAdmin, async (req, res, next) => {
         try {
             await conn.beginTransaction();
 
-            // Delete files attached to this test's questions.
-            await conn.execute(
-                `DELETE FROM Question_Attachments
-                 WHERE Question_id IN (
-                     SELECT Question_id
-                     FROM questions
-                     WHERE Test_id = ?
-                 )`,
-                [test.id]
-            );
+            // // Delete files attached to this test's questions.
+            // await conn.execute(
+            //     `DELETE FROM Question_Attachments
+            //      WHERE Question_id IN (
+            //          SELECT Question_id
+            //          FROM questions
+            //          WHERE Test_id = ?
+            //      )`,
+            //     [test.id]
+            // );
 
             // Delete images and recordings.
-            await conn.execute(
-                `DELETE FROM Answer_Images WHERE Test_id = ?`,
-                [test.id]
-            );
+            // await conn.execute(
+            //     `DELETE FROM Answer_Images WHERE Test_id = ?`,
+            //     [test.id]
+            // );
 
             await conn.execute(
                 `DELETE FROM Answer_Recordings WHERE test_code = ?`,
@@ -984,7 +984,7 @@ app.delete("/api/tests/:code", requireAdmin, async (req, res, next) => {
             );
 
             await conn.execute(
-                `DELETE FROM questions WHERE Test_id = ?`,
+                `DELETE FROM Questions WHERE Test_id = ?`,
                 [test.id]
             );
 
