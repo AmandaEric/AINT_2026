@@ -506,6 +506,27 @@ p2{
     margin-top: 20px;
 }
 
+.delete-attempt-button {
+    background-color: #c62828;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 16px;
+    margin: 12px 0;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.delete-attempt-button:hover {
+    background-color: #a51f1f;
+}
+
+.delete-attempt-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+
 
 
 

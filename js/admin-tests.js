@@ -1699,7 +1699,52 @@
                     const summary = document.createElement("p");
                     summary.textContent = submission.summary || "";
         
+                    
                     card.append(title, score, summary);
+
+                    // Delete button for this specific student attempt.
+                    if (submission.attemptId !== null &&
+                        submission.attemptId !== undefined) {
+
+                        const deleteButton = makeButton(
+                            "Delete Attempt",
+                            "delete-attempt-button",
+                            async () => {
+                                const confirmed = confirm(
+                                    `Permanently delete ${submission.studentName}'s attempt?\n\n` +
+                                    "This will delete the score, answers, recordings, " +
+                                    "and proctoring events for this attempt.\n\n" +
+                                    "This cannot be undone."
+                                );
+
+                                if (!confirmed) return;
+
+                                deleteButton.disabled = true;
+                                deleteButton.textContent = "Deleting...";
+
+                                try {
+                                    await api(
+                                        `/api/tests/${encodeURIComponent(code)}/attempts/${submission.attemptId}`,
+                                        { method: "DELETE" }
+                                    );
+
+                                    alert("Student attempt deleted successfully.");
+
+                                    // Reload the results without the deleted attempt.
+                                    await loadResults(code);
+
+                                } catch (error) {
+                                    alert(`Could not delete attempt: ${error.message}`);
+
+                                    deleteButton.disabled = false;
+                                    deleteButton.textContent = "Delete Attempt";
+                                }
+                            }
+                        );
+
+                        card.appendChild(deleteButton);
+                    }
+
                     
                     // Show only events belonging to this exact exam attempt.
 

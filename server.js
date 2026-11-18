@@ -1013,6 +1013,106 @@ app.delete("/api/tests/:code", requireAdmin, async (req, res, next) => {
     }
 });
 
+// ADMIN: permanently delete one student's exam attempt.
+app.delete(
+    "/api/tests/:code/attempts/:attemptId",
+    requireAdmin,
+    async (req, res, next) => {
+        let conn;
+
+        try {
+            const test = await getOwnedTest(
+                req.params.code,
+                req.admin.Admin_id
+            );
+
+            if (!test) {
+                return res.status(404).json({
+                    success: false,
+                    error: "Test not found."
+                });
+            }
+
+            const attemptId = Number(req.params.attemptId);
+
+            if (!Number.isInteger(attemptId) || attemptId <= 0) {
+                return badRequest(res, "Invalid attempt ID.");
+            }
+
+            conn = await pool.getConnection();
+            await conn.beginTransaction();
+
+            // Confirm this attempt belongs to this test.
+            const [attempts] = await conn.execute(
+                `SELECT attempt_id
+                   FROM Exam_Attempts
+                  WHERE attempt_id = ?
+                    AND test_code = ?
+                  FOR UPDATE`,
+                [attemptId, test.test_code]
+            );
+
+            if (attempts.length === 0) {
+                await conn.rollback();
+
+                return res.status(404).json({
+                    success: false,
+                    error: "Exam attempt not found."
+                });
+            }
+
+            // Delete recordings for this attempt.
+            await conn.execute(
+                `DELETE FROM Answer_Recordings
+                  WHERE attempt_id = ?
+                    AND test_code = ?`,
+                [attemptId, test.test_code]
+            );
+
+            // Delete proctoring events for this attempt.
+            await conn.execute(
+                `DELETE FROM Proctoring_Events
+                  WHERE attempt_id = ?
+                    AND exam_code = ?`,
+                [attemptId, test.test_code]
+            );
+
+            // Delete the student's score and answers.
+            await conn.execute(
+                `DELETE FROM Test_Scores
+                  WHERE attempt_id = ?
+                    AND Test_id = ?`,
+                [attemptId, test.id]
+            );
+
+            // Finally, delete the exam attempt.
+            await conn.execute(
+                `DELETE FROM Exam_Attempts
+                  WHERE attempt_id = ?
+                    AND test_code = ?`,
+                [attemptId, test.test_code]
+            );
+
+            await conn.commit();
+
+            res.json({
+                success: true,
+                message: "Student exam attempt deleted."
+            });
+
+        } catch (err) {
+            if (conn) {
+                await conn.rollback().catch(() => {});
+            }
+
+            next(err);
+
+        } finally {
+            if (conn) conn.release();
+        }
+    }
+);
+
 
 app.get("/api/tests/:code/edit", requireAdmin, async (req, res, next) => {
     try {
