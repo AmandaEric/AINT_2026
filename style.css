@@ -494,6 +494,8 @@ p2{
 .result-card .proctoring-report {
     background: #f5f9f8;
     border: 1px solid #dce9e6;
+    color: red;
+    font-weight: 300;
     border-radius: 8px;
     padding: 14px;
     margin: 18px 0;
