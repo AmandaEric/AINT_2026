@@ -360,7 +360,7 @@ bindEvent(el.startButton, "click", async () => {
             
             if (!response.ok) {
                 throw new Error(
-                    data.message || `Server responded with ${response.status}`
+                    data.error || data.message || `Server responded with ${response.status}`
                 );
             }
 
@@ -368,9 +368,13 @@ bindEvent(el.startButton, "click", async () => {
 
             // Save the student and attempt information returned by the server.
             exam.studentName = studentName;
-            exam.attemptId = data.attemptId ?? null;
+            exam.attemptId = Number(data.attemptId);
             exam.attemptNumber = data.attemptNumber ?? null;
             exam.maxAttempts = data.maxAttempts ?? null;
+            
+            if (!Number.isInteger(exam.attemptId) || exam.attemptId <= 0) {
+                throw new Error("The server did not create a valid exam attempt. Please try again.");
+            }
 
             // Save the approved websites returned by the backend.
             exam.allowedTabs = Array.isArray(data.allowedTabs)
@@ -445,6 +449,10 @@ bindEvent(el.startButton, "click", async () => {
 
 async function submitExam() {
     if (exam.submitted) return;
+    if (!Number.isInteger(exam.attemptId) || exam.attemptId <= 0) {
+        alert("Your exam attempt could not be identified. Please contact your administrator.");
+        return;
+    }
 
     if (exam.log.length === 0) {
         if (el.evaluationBox) {

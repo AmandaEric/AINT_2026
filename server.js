@@ -1033,10 +1033,10 @@ app.delete(
                 });
             }
 
-            const attemptId = Number(req.params.attemptId);
+            const attemptId = Number(req.body.attemptId);
 
             if (!Number.isInteger(attemptId) || attemptId <= 0) {
-                return badRequest(res, "Invalid attempt ID.");
+                return badRequest(res, "A valid exam attempt ID is required.");
             }
 
             conn = await pool.getConnection();
@@ -1473,10 +1473,10 @@ app.post("/api/tests/:code/start", rateLimit(20, 60 * 1000), async (req, res, ne
         const maxAttempts =
             test.max_attempts === null ? null : Number(test.max_attempts);
 
-        if (maxAttempts !== null && !studentName) {
-            await conn.rollback();
-            return badRequest(res, "Enter your name to start this test.");
-        }
+            if (!studentName) {
+                await conn.rollback();
+                return badRequest(res, "Enter your name to start this test.");
+            }
 
         let attemptsUsed = 0;
 
@@ -1818,8 +1818,36 @@ app.post("/api/tests/:code/submit", rateLimit(10, 60 * 1000), async (req, res, n
         const test = tests[0];
         if (!test) return res.status(404).json({ success: false, error: "Test not found." });
 
-        const studentName = cleanStudentName(req.body.studentName);
-        if (!studentName) return badRequest(res, "Student name is required.");
+        const code = String(req.params.code).trim().toUpperCase();
+        const attemptId = Number(req.body.attemptId);        
+        if (!Number.isInteger(attempt_id) || attempt_id <= 0) {
+            return badRequest(res, "A valid exam attempt ID is required.");
+        }
+        
+        // Find the attempt using its ID, not the student's typed name.
+        const [attempts] = await pool.execute(
+            `SELECT student_name, status
+               FROM Exam_Attempts
+              WHERE attempt_id = ?
+                AND test_code = ?`,
+            [attemptId, code]
+        );
+        
+        if (!attempts.length) {
+            return res.status(404).json({
+                success: false,
+                error: "Exam attempt not found."
+            });
+        }
+        
+        if (attempts[0].status !== "IN_PROGRESS") {
+            return res.status(409).json({
+                success: false,
+                error: "This exam attempt has already been submitted."
+            });
+        }
+        
+        const studentName = attempts[0].student_name;
 
         const rawLog = Array.isArray(req.body.log) ? req.body.log.slice(0, 100) : [];
         if (rawLog.length === 0) return badRequest(res, "Nothing to submit.");
@@ -1896,46 +1924,44 @@ app.post("/api/tests/:code/submit", rateLimit(10, 60 * 1000), async (req, res, n
             console.error("GRADING ERROR:", err.message);
         }
 
-        // Get the attempt ID that was created when the student started the test.
-        const rawAttemptId = Number(req.body.attemptId);
-
-        const attemptId =
-            Number.isInteger(rawAttemptId) && rawAttemptId > 0
-                ? rawAttemptId
-                : null;
-
         // Save the student.
         const [student] = await pool.execute(
-            `INSERT INTO Students (student_name)
-            VALUES (?)`,
+            `INSERT INTO Students (student_name) VALUES (?)`,
             [studentName]
         );
-
-        // Save the score AND the attempt ID.
-        const [score] = await pool.execute(
-            `INSERT INTO Test_Scores
-                (
-                    Test_id,
-                    Students_id,
-                    attempt_id,
-                    score_percent,
-                    grading_failed,
+        
+        let score;
+        
+        try {
+            const [inserted] = await pool.execute(
+                `INSERT INTO Test_Scores
+                    (Test_id, Students_id, attempt_id, score_percent,
+                     grading_failed, summary, duration_seconds, details_json)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    test.id,
+                    student.insertId,
+                    attemptId,
+                    percent,
+                    gradingFailed,
                     summary,
-                    duration_seconds,
-                    details_json
-                )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                test.id,
-                student.insertId,
-                attemptId,
-                percent,
-                gradingFailed,
-                summary,
-                durationSeconds,
-                JSON.stringify(details)
-            ]
-        );
+                    durationSeconds,
+                    JSON.stringify(details)
+                ]
+            );
+        
+            score = inserted;
+        
+        } catch (err) {
+            if (err.code === "ER_DUP_ENTRY") {
+                return res.status(409).json({
+                    success: false,
+                    error: "This exam attempt already has a score."
+                });
+            }
+        
+            throw err;
+        }
 
         // Mark this specific attempt as submitted. A logging problem must not
         // prevent the student's answers and score from being saved.
