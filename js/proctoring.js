@@ -115,14 +115,23 @@ function stopProctoring() {
 function pauseProctoring(milliseconds = 3000) {
     proctoringPausedUntil = Date.now() + milliseconds;
 }
-// document.addEventListener("visibilitychange", () => {
-//     if (!proctoringActive) return;
-//     if (document.hidden) {
-//         recordProctoringEvent("TAB_HIDDEN", "Student switched to another tab.");
-//     } else {
-//         recordProctoringEvent("TAB_VISIBLE", "Student returned to the exam tab.");
-//     }
-// });
+
+document.addEventListener("visibilitychange", () => {
+    if (!proctoringActive) return;
+
+    if (document.hidden) {
+        recordProctoringEvent(
+            "TAB_HIDDEN",
+            "Student switched to another tab."
+        );
+    } else {
+        recordProctoringEvent(
+            "TAB_VISIBLE",
+            "Student returned to the exam tab."
+        );
+    }
+});
+
 
 
 // ------------------------------------------
