@@ -1691,6 +1691,18 @@
         
                     const title = document.createElement("h4");
                     title.textContent = submission.studentName || "Unknown student";
+                    const date = document.createElement("p");
+
+                    const submittedDate = submission.submittedAt
+                        ? new Date(submission.submittedAt)
+                        : null;
+
+                    date.textContent =
+                        submittedDate && !Number.isNaN(submittedDate.getTime())
+                            ? `Submitted: ${submittedDate.toLocaleString()}`
+                            : "Submission date unavailable";
+
+                    date.className = "result-date";
         
                     const score = document.createElement("p");
         
@@ -1702,7 +1714,7 @@
                     summary.textContent = submission.summary || "";
         
                     
-                    card.append(title, score, summary);
+                    card.append(title, date, score, summary);
 
                     // Delete button for this specific student attempt.
                     if (submission.attemptId !== null &&
