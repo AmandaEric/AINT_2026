@@ -1111,13 +1111,15 @@
                     }
                 );
 
-                const resultsButton = makeButton(
-                    "View Results",
-                    "",
-                    async () => {
-                        await loadResults(test.code);
+                const resultsButton = makeButton("View Results", "", async () => {
+                    const resultsContainer = $("resultsList");
+                
+                    if (resultsContainer) {
+                        resultsContainer.hidden = false;
                     }
-                );
+                
+                    await loadResults(test.code);
+                });
 
                 const deleteButton = makeButton("Delete Test", "delete-test", async () => {
                     const confirmed = confirm(
