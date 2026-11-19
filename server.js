@@ -1820,7 +1820,7 @@ app.post("/api/tests/:code/submit", rateLimit(10, 60 * 1000), async (req, res, n
 
         const code = String(req.params.code).trim().toUpperCase();
         const attemptId = Number(req.body.attemptId);        
-        if (!Number.isInteger(attempt_id) || attempt_id <= 0) {
+        if (!Number.isInteger(attemptId) || attemptId <= 0) {
             return badRequest(res, "A valid exam attempt ID is required.");
         }
         

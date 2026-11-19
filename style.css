@@ -528,7 +528,28 @@ p2{
     cursor: not-allowed;
 }
 
+.extension-notice {
+    border: 1px solid #d6a84b;
+    border-radius: 10px;
+    padding: 16px;
+    margin: 20px 0;
+    background: #fff8e8;
+    color: #333;
+}
 
+.extension-install-button {
+    display: inline-block;
+    padding: 10px 16px;
+    background: #3f9a90;
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    margin: 8px 0;
+}
+
+#extensionStatus {
+    font-weight: bold;
+}
 
 
 

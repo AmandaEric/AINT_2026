@@ -9,7 +9,49 @@
  * (provides speakAsAvatar and stopAvatarSpeech).
  * ============================================================
  */
+function checkAintExtension() {
+    return new Promise((resolve) => {
 
+        let finished = false;
+
+        function finish(installed) {
+            if (finished) return;
+
+            finished = true;
+            window.removeEventListener("message", handleMessage);
+            clearTimeout(timeout);
+
+            resolve(installed);
+        }
+
+        function handleMessage(event) {
+
+            if (event.source !== window) return;
+            if (event.origin !== window.location.origin) return;
+
+            if (
+                event.data?.source === "AINT_EXTENSION" &&
+                event.data?.type === "AINT_EXTENSION_READY"
+            ) {
+                finish(true);
+            }
+        }
+
+        window.addEventListener("message", handleMessage);
+
+        const timeout = setTimeout(() => {
+            finish(false);
+        }, 1500);
+
+        window.postMessage(
+            {
+                source: "AINT_PAGE",
+                type: "AINT_EXTENSION_CHECK"
+            },
+            window.location.origin
+        );
+    });
+}
 // ==========================================
 // STUDENT: REPLAY QUESTION AUDIO
 // ==========================================
@@ -321,6 +363,27 @@ bindEvent(el.startButton, "click", async () => {
             alert("Please make your browser window full size, then click Start again.\n\nMac: double-click the top bar of the window. Windows: click the maximize button.");
             return;
         }
+        const extensionInstalled = await checkAintExtension();
+
+        const extensionStatus = document.getElementById("extensionStatus");
+
+        if (!extensionInstalled) {
+            if (extensionStatus) {
+                extensionStatus.textContent =
+                    "AINT Exam Monitor is not detected. Please install it before starting.";
+            }
+
+            alert(
+                "The AINT Exam Monitor extension is required. " +
+                "Please install it and refresh this page."
+            );
+
+            return;
+        }
+
+        if (extensionStatus) {
+            extensionStatus.textContent = "AINT extension detected.";
+        }
 
         el.startButton.disabled = true;
 
@@ -431,7 +494,11 @@ bindEvent(el.startButton, "click", async () => {
         }
                 
         // Tell the Chrome extension that this exam has started.
-        notifyAintExtension("START");
+        notifyAintExtension("START", {
+            testCode: exam.testCode,
+            attemptId: exam.attemptId,
+            allowedTabs: exam.allowedTabs
+        });
         document.body.classList.add("exam-active");
         startSessionSaver();
         addAllQuestions();
