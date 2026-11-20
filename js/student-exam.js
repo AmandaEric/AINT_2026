@@ -52,8 +52,8 @@ function checkAintExtension() {
         );
     });
 }
-// Check for the AINT extension when the student page loads.
-document.addEventListener("DOMContentLoaded", async () => {
+// Check for the AINT extension when the page loads.
+async function updateAintExtensionStatus() {
 
     const extensionStatus = document.getElementById("extensionStatus");
 
@@ -72,7 +72,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         extensionStatus.style.color = "#c0392b";
     }
-});
+}
+
+// Run immediately if the page has already loaded.
+if (document.readyState === "loading") {
+    document.addEventListener(
+        "DOMContentLoaded",
+        updateAintExtensionStatus
+    );
+} else {
+    updateAintExtensionStatus();
+}
 // ==========================================
 // STUDENT: REPLAY QUESTION AUDIO
 // ==========================================
