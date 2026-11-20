@@ -165,6 +165,9 @@ app.get("/health", (_, res) => res.json({ success: true, message: "AINT server i
 app.get("/", (_, res) => res.sendFile(path.join(__dirname, "main.html")));
 app.get("/main.html", (_, res) => res.sendFile(path.join(__dirname, "main.html")));
 app.get("/admin.html", (_, res) => res.sendFile(path.join(__dirname, "admin.html")));
+app.get("/extension-install.html", (_, res) => {
+    res.sendFile(path.join(__dirname, "extension-install.html"));
+});
 // Split admin pages (only needed if you use them)
 app.get("/admin-menu.html", (_, res) => res.sendFile(path.join(__dirname, "admin-menu.html")));
 app.get("/admin-create.html", (_, res) => res.sendFile(path.join(__dirname, "admin-create.html")));
