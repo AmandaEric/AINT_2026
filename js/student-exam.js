@@ -678,11 +678,9 @@ function showQuestionImage(src) {
     if (src && typeof src === "string" && src.trim() !== "") {
         questionImage.src = src;
         questionImage.hidden = false;
-        if (el.avatarContainer) el.avatarContainer.classList.add("has-question-image");
     } else {
         questionImage.removeAttribute("src");
         questionImage.hidden = true;
-        if (el.avatarContainer) el.avatarContainer.classList.remove("has-question-image");
     }
 }
 

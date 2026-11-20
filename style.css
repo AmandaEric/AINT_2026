@@ -774,3 +774,27 @@ body.exam-active .avatar-container.avatar-container-large {
 body.exam-active .avatar-container.has-question-image {
     display: flex;
 }
+/* Question images without the AI avatar */
+.question-image-container {
+    display: none;
+    width: 100%;
+    max-width: 650px;
+    height: min(65vh, 550px);
+    margin: 10px auto;
+    justify-content: center;
+    align-items: center;
+    background: #111;
+    border: 2px solid #4db6ac;
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.question-image-container:has(#question-image:not([hidden])) {
+    display: flex;
+}
+
+.question-image-container #question-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
