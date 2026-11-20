@@ -771,3 +771,6 @@ body.exam-active .avatar-container.avatar-container-large {
     height: min(70vh, 650px);
     margin: 10px auto;
 }
+body.exam-active .avatar-container.has-question-image {
+    display: flex;
+}

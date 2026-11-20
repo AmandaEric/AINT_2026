@@ -531,6 +531,12 @@ bindEvent(el.startButton, "click", async () => {
             allowedTabs: exam.allowedTabs
         });
         document.body.classList.add("exam-active");
+        // Hide the extension notice once the exam starts.
+        const extensionNotice = document.getElementById("extensionNotice");
+
+        if (extensionNotice) {
+            extensionNotice.hidden = true;
+        }
         startSessionSaver();
         addAllQuestions();
         askNextQuestion();
