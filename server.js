@@ -1341,8 +1341,8 @@ app.patch("/api/tests/:code", requireAdmin, async (req, res, next) => {
         if (fields.length === 0) return badRequest(res, "Nothing to update.");
 
         await pool.execute(
-            `UPDATE tests SET ${fields.join(", ")} WHERE id = ?`,
-            [...values, test.id]
+            `UPDATE tests SET ${fields.join(", ")} WHERE id = ? AND admin_id = ?`,
+            [...values, test.id, req.admin.Admin_id]
         );
         res.json({ success: true });
     } catch (err) {
