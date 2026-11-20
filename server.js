@@ -1036,7 +1036,7 @@ app.delete(
                 });
             }
 
-            const attemptId = Number(req.body.attemptId);
+            const attemptId = Number(req.params.attemptId);
 
             if (!Number.isInteger(attemptId) || attemptId <= 0) {
                 return badRequest(res, "A valid exam attempt ID is required.");
