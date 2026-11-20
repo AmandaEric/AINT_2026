@@ -2,9 +2,15 @@
 /*
  * AINT background.js
  *
- * Monitors browser tabs during active AINT exams.
- * Ignores approved websites.
- * Records unauthorized website activity.
+ * Monitors active Chrome tabs during AINT exams.
+ *
+ * Improvements:
+ * - Does not flag websites just because they were already open.
+ * - Checks the active tab in the focused Chrome window.
+ * - Detects when a student switches Chrome windows.
+ * - Detects navigation to unauthorized websites.
+ * - Ignores approved websites.
+ * - Records unauthorized activity with the correct attempt ID.
  */
 
 const activeExams = new Map();
@@ -36,9 +42,14 @@ chrome.runtime.onMessage.addListener((message, sender) => {
             backendUrl: payload.backendUrl || "",
             testCode: payload.testCode,
             attemptId: payload.attemptId,
+
+            // Remember the window containing the AINT exam.
+            examWindowId: sender.tab.windowId,
+
             allowedTabs: Array.isArray(payload.allowedTabs)
                 ? payload.allowedTabs
                 : [],
+
             reportedUrls: new Set()
         });
 
@@ -46,17 +57,28 @@ chrome.runtime.onMessage.addListener((message, sender) => {
             "AINT monitoring started:",
             payload.testCode,
             "Attempt:",
-            payload.attemptId
+            payload.attemptId,
+            "Exam window:",
+            sender.tab.windowId
         );
 
-        checkAllTabs(true);
+        /*
+         * IMPORTANT:
+         * Do not scan every open tab here.
+         * Existing background tabs are not automatically
+         * considered unauthorized activity.
+         */
+
     }
 
     if (message?.type === "AINT_PROCTORING_STOP") {
 
         activeExams.delete(examTabId);
 
-        console.log("AINT monitoring stopped for tab:", examTabId);
+        console.log(
+            "AINT monitoring stopped for tab:",
+            examTabId
+        );
     }
 });
 
@@ -112,7 +134,11 @@ function isApprovedUrl(url, allowedTabs) {
 
             if (matchType === "PREFIX") {
 
-                return url.startsWith(approvedUrl);
+                const normalizedPrefix = approvedUrl.includes("://")
+                    ? approvedUrl
+                    : `https://${approvedUrl}`;
+
+                return url.startsWith(normalizedPrefix);
             }
 
             // Default: exact hostname, origin, and path.
@@ -133,7 +159,7 @@ function isApprovedUrl(url, allowedTabs) {
    RECORD AN UNAUTHORIZED WEBSITE
 ========================================== */
 
-async function recordUnauthorized(exam, url, tabId, eventType) {
+async function recordUnauthorized(exam, url, tabId) {
 
     const key = `${tabId}:${url}`;
 
@@ -148,12 +174,14 @@ async function recordUnauthorized(exam, url, tabId, eventType) {
             `${exam.backendUrl}/api/tests/${encodeURIComponent(exam.testCode)}/proctoring-events`,
             {
                 method: "POST",
+
                 headers: {
                     "Content-Type": "application/json"
                 },
+
                 body: JSON.stringify({
-                    type: eventType,
-                    details: `Unauthorized website visited: ${url}`,
+                    type: "UNAUTHORIZED_WEBSITE_ACTIVE",
+                    details: `Unauthorized website accessed: ${url}`,
                     url: url,
                     timestamp: new Date().toISOString(),
                     attemptId: exam.attemptId
@@ -162,6 +190,7 @@ async function recordUnauthorized(exam, url, tabId, eventType) {
         );
 
         if (!response.ok) {
+
             exam.reportedUrls.delete(key);
 
             console.error(
@@ -172,7 +201,10 @@ async function recordUnauthorized(exam, url, tabId, eventType) {
             return;
         }
 
-        console.log("AINT: Unauthorized website recorded:", url);
+        console.log(
+            "AINT: Unauthorized website recorded:",
+            url
+        );
 
     } catch (error) {
 
@@ -185,11 +217,12 @@ async function recordUnauthorized(exam, url, tabId, eventType) {
     }
 }
 
+
 /* ==========================================
-   CHECK ONE BROWSER TAB
+   CHECK ONE ACTIVE TAB
 ========================================== */
 
-function checkTab(tab, initialScan = false) {
+function checkTab(tab) {
 
     if (!tab || !tab.url || tab.id === undefined) return;
 
@@ -201,40 +234,47 @@ function checkTab(tab, initialScan = false) {
         return;
     }
 
+    // Only inspect the active tab in a focused window.
+    if (!tab.active) return;
+
     for (const [examTabId, exam] of activeExams.entries()) {
 
         // Never flag the student's own AINT exam tab.
         if (tab.id === examTabId) continue;
 
-        if (!isApprovedUrl(tab.url, exam.allowedTabs)) {
-
-            const eventType = initialScan
-                ? "UNAUTHORIZED_TAB_ALREADY_OPEN"
-                : "UNAUTHORIZED_WEBSITE_ACTIVE";
-
-            recordUnauthorized(
-                exam,
-                tab.url,
-                tab.id,
-                eventType
-            );
+        if (isApprovedUrl(tab.url, exam.allowedTabs)) {
+            continue;
         }
+
+        recordUnauthorized(
+            exam,
+            tab.url,
+            tab.id
+        );
     }
 }
 
 
 /* ==========================================
-   CHECK ALL OPEN TABS
+   CHECK WHETHER A TAB'S WINDOW IS FOCUSED
 ========================================== */
 
-function checkAllTabs(initialScan = false) {
+function checkFocusedTab(tab) {
 
-    chrome.tabs.query({}, (tabs) => {
+    if (!tab || tab.windowId === undefined) return;
 
-        for (const tab of tabs) {
-            checkTab(tab, initialScan);
+    chrome.windows.get(tab.windowId, (browserWindow) => {
+
+        if (chrome.runtime.lastError) {
+            return;
         }
 
+        // Ignore tabs in background Chrome windows.
+        if (!browserWindow || !browserWindow.focused) {
+            return;
+        }
+
+        checkTab(tab);
     });
 }
 
@@ -247,33 +287,77 @@ function checkAllTabs(initialScan = false) {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
     if (changeInfo.url || changeInfo.status === "complete") {
-        checkTab(tab);
+        checkFocusedTab(tab);
     }
 
 });
 
 
-// Check when the student switches tabs.
+// Check when the active tab changes within a Chrome window.
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
 
     try {
 
         const tab = await chrome.tabs.get(activeInfo.tabId);
 
-        checkTab(tab);
+        checkFocusedTab(tab);
 
     } catch (error) {
 
-        console.error("AINT: Could not inspect tab.", error);
-
+        console.error(
+            "AINT: Could not inspect tab.",
+            error
+        );
     }
 
 });
 
 
-// Remove exam tracking when the AINT tab closes.
+/* ==========================================
+   MONITOR CHROME WINDOW SWITCHING
+========================================== */
+
+// Detect when the student brings another Chrome window
+// to the foreground.
+chrome.windows.onFocusChanged.addListener((windowId) => {
+
+    // Ignore when no Chrome window is focused.
+    if (windowId === chrome.windows.WINDOW_ID_NONE) {
+        return;
+    }
+
+    chrome.tabs.query(
+        {
+            active: true,
+            windowId: windowId
+        },
+        (tabs) => {
+
+            if (chrome.runtime.lastError) {
+                return;
+            }
+
+            if (tabs.length > 0) {
+                checkTab(tabs[0]);
+            }
+
+        }
+    );
+
+});
+
+
+/* ==========================================
+   REMOVE EXAM TRACKING WHEN AINT CLOSES
+========================================== */
+
 chrome.tabs.onRemoved.addListener((tabId) => {
 
     activeExams.delete(tabId);
+
+    console.log(
+        "AINT: Removed exam tracking for tab:",
+        tabId
+    );
 
 });
