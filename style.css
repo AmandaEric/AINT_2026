@@ -251,6 +251,41 @@ footer {
 }
 
 
+.exam-setup-instructions {
+    background: #f4f7fb;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 20px 0;
+    color: #263445;
+}
+
+.exam-setup-instructions h3 {
+    margin-top: 0;
+    color: #2457a7;
+}
+
+.exam-setup-instructions h4 {
+    margin-bottom: 6px;
+}
+
+.exam-setup-instructions ul {
+    margin-top: 5px;
+    padding-left: 25px;
+}
+
+.exam-setup-instructions li {
+    margin-bottom: 5px;
+}
+
+.setup-warning {
+    background: #fff3cd;
+    border-left: 4px solid #d69e36;
+    padding: 12px;
+    border-radius: 5px;
+    font-weight: bold;
+}
+
 
 /* =========================
    BUTTONS

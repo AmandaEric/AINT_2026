@@ -516,6 +516,7 @@ bindEvent(el.startButton, "click", async () => {
         startProctoring();
         // Start camera and microphone for answer recordings.
         if (typeof startCamera === "function") {
+            pauseProctoring(10000);
             const cameraReady = await startCamera();
 
             if (!cameraReady) {
@@ -524,12 +525,8 @@ bindEvent(el.startButton, "click", async () => {
             }
         }
                 
-        // Tell the Chrome extension that this exam has started.
-        notifyAintExtension("START", {
-            testCode: exam.testCode,
-            attemptId: exam.attemptId,
-            allowedTabs: exam.allowedTabs
-        });
+        // Start website monitoring only after the exam has successfully started.
+        notifyAintExtension("START");
         document.body.classList.add("exam-active");
         // Hide the extension notice once the exam starts.
         const extensionNotice = document.getElementById("extensionNotice");
