@@ -673,14 +673,18 @@ function addAllQuestions() {
 
 function showQuestionImage(src) {
     const questionImage = document.getElementById("question-image");
-    if (!questionImage) return;
+    const imageContainer = document.querySelector(".question-image-container");
+
+    if (!questionImage || !imageContainer) return;
 
     if (src && typeof src === "string" && src.trim() !== "") {
         questionImage.src = src;
         questionImage.hidden = false;
+        imageContainer.classList.add("show-image");
     } else {
         questionImage.removeAttribute("src");
         questionImage.hidden = true;
+        imageContainer.classList.remove("show-image");
     }
 }
 
