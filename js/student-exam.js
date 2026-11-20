@@ -52,6 +52,27 @@ function checkAintExtension() {
         );
     });
 }
+// Check for the AINT extension when the student page loads.
+document.addEventListener("DOMContentLoaded", async () => {
+
+    const extensionStatus = document.getElementById("extensionStatus");
+
+    if (!extensionStatus) return;
+
+    extensionStatus.textContent = "Checking for the AINT extension...";
+
+    const installed = await checkAintExtension();
+
+    if (installed) {
+        extensionStatus.textContent = "AINT extension detected.";
+        extensionStatus.style.color = "#3f9a90";
+    } else {
+        extensionStatus.textContent =
+            "AINT Exam Monitor not detected. Please install the extension.";
+
+        extensionStatus.style.color = "#c0392b";
+    }
+});
 // ==========================================
 // STUDENT: REPLAY QUESTION AUDIO
 // ==========================================
