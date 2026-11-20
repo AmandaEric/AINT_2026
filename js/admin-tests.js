@@ -1461,6 +1461,11 @@
                     description: "The exam window lost focus. The student may have interacted with another application.",
                     severity: "review"
                 },
+                UNAUTHORIZED_TAB_ALREADY_OPEN: {
+                    title: "Unauthorized website already open",
+                    description: "This website was already open when the student started the exam.",
+                    severity: "review"
+                },
                 TAB_HIDDEN: {
                     title: "Exam tab hidden",
                     description: "The exam tab became hidden or the student navigated away from it.",
@@ -1540,80 +1545,299 @@
             };
         }
 
+        // Convert a database timestamp into a JavaScript Date.
+        function parseProctoringTimestamp(value) {
 
-        // Display interpreted proctoring events for one exam attempt.
-        function renderProctoringReport(events, container) {
-            const section = document.createElement("div");
-            section.className = "proctoring-report";
+            if (!value) return null;
 
-            const heading = document.createElement("h4");
-            heading.textContent = "Proctoring Event Report";
-            section.appendChild(heading);
-
-            if (!events || events.length === 0) {
-                const empty = document.createElement("p");
-                empty.textContent = "No proctoring events were recorded for this attempt.";
-                section.appendChild(empty);
-                container.appendChild(section);
-                return;
+            if (value instanceof Date) {
+                return Number.isNaN(value.getTime()) ? null : value;
             }
 
-            const reviewCount = events.filter(
-                event => event.severity === "review"
-            ).length;
+            let timestamp = String(value).trim();
 
-            const technicalCount = events.filter(
-                event => event.severity === "technical"
-            ).length;
+            // MySQL DATETIME values often look like:
+            // 2026-11-20 16:30:00
+            //
+            // Treat timestamps without a timezone as UTC.
+            if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(timestamp)) {
+                timestamp = timestamp.replace(" ", "T") + "Z";
+            }
 
-            const summary = document.createElement("p");
-            summary.textContent =
-                `${reviewCount} event(s) requiring review | ` +
-                `${technicalCount} technical event(s)`;
-            section.appendChild(summary);
+            const date = new Date(timestamp);
 
-            const list = document.createElement("div");
-            list.className = "proctoring-event-list";
-
-            events.forEach((event) => {
-                const item = document.createElement("div");
-                item.className = `proctoring-event ${event.severity || "technical"}`;
-
-                const title = document.createElement("strong");
-                title.textContent = event.title || event.event_type || "Unknown event";
-
-                const description = document.createElement("p");
-                description.textContent =
-                    event.description || "No additional explanation is available.";
-
-                const time = document.createElement("small");
-                const parsedTime = new Date(event.event_timestamp);
-
-                time.textContent = Number.isNaN(parsedTime.getTime())
-                    ? String(event.event_timestamp || "Time unavailable")
-                    : parsedTime.toLocaleString();
-
-                item.append(title, description, time);
-
-                if (event.details) {
-                    const details = document.createElement("p");
-                    details.textContent = `Recorded details: ${event.details}`;
-                    item.appendChild(details);
-                }
-
-                list.appendChild(item);
-            });
-
-            section.appendChild(list);
-
-            const disclaimer = document.createElement("p");
-            disclaimer.className = "proctoring-disclaimer";
-            disclaimer.textContent =
-                "Proctoring events are indicators for review and do not independently prove academic dishonesty.";
-
-            section.appendChild(disclaimer);
-            container.appendChild(section);
+            return Number.isNaN(date.getTime()) ? null : date;
         }
+
+
+        // Display a readable date and time.
+        function formatProctoringTimestamp(value) {
+
+            const date = parseProctoringTimestamp(value);
+
+            if (!date) {
+                return "Time unavailable";
+            }
+
+            return date.toLocaleString([], {
+                dateStyle: "medium",
+                timeStyle: "short"
+            });
+        }
+
+
+        // Find a website URL inside the event.
+        function getEventWebsiteUrl(event) {
+
+            if (event.url) {
+                return event.url;
+            }
+
+            const details = String(event.details || "");
+
+            const match = details.match(/https?:\/\/[^\s]+/i);
+
+            if (!match) return "";
+
+            return match[0].replace(/[.,;]+$/, "");
+        }
+
+
+        // Convert a long URL into a readable website name.
+        function getWebsiteDisplayName(url) {
+
+            if (!url) return "";
+
+            try {
+
+                const parsed = new URL(url);
+
+                const hostname = parsed.hostname.replace(/^www\./, "");
+
+                const path = parsed.pathname.replace(/\/$/, "");
+
+                return hostname + (path && path !== "/" ? path : "");
+
+            } catch {
+
+                return url;
+            }
+        }
+
+
+        // Sort events chronologically, oldest first.
+        function sortProctoringEvents(events) {
+
+            return [...events].sort((a, b) => {
+
+                const timeA =
+                    parseProctoringTimestamp(a.event_timestamp)?.getTime() || 0;
+
+                const timeB =
+                    parseProctoringTimestamp(b.event_timestamp)?.getTime() || 0;
+
+                return timeA - timeB;
+            });
+        }
+        // Display interpreted proctoring events for one exam attempt.
+// Display a grouped, chronological proctoring report.
+function renderProctoringReport(events, container) {
+
+    const section = document.createElement("div");
+    section.className = "proctoring-report";
+
+    const heading = document.createElement("h4");
+    heading.textContent = "Proctoring Event Report";
+
+    section.appendChild(heading);
+
+    if (!events || events.length === 0) {
+
+        const empty = document.createElement("p");
+        empty.textContent =
+            "No proctoring events were recorded for this attempt.";
+
+        section.appendChild(empty);
+        container.appendChild(section);
+
+        return;
+    }
+
+    // Sort all events chronologically.
+    const sortedEvents = sortProctoringEvents(events);
+
+    // Separate websites that were already open at exam start.
+    const alreadyOpen = sortedEvents.filter(
+        event => event.event_type === "UNAUTHORIZED_TAB_ALREADY_OPEN"
+    );
+
+    // Everything else happened during the exam.
+    const duringExam = sortedEvents.filter(
+        event => event.event_type !== "UNAUTHORIZED_TAB_ALREADY_OPEN"
+    );
+
+    const reviewCount = sortedEvents.filter(
+        event => event.severity === "review"
+    ).length;
+
+    const technicalCount = sortedEvents.filter(
+        event => event.severity === "technical"
+    ).length;
+
+    const summary = document.createElement("div");
+    summary.className = "proctoring-summary";
+
+    summary.textContent =
+        `${reviewCount} event(s) requiring review | ` +
+        `${technicalCount} technical event(s) | ` +
+        `${alreadyOpen.length} unauthorized website(s) already open | ` +
+        `${duringExam.filter(event =>
+            event.event_type === "UNAUTHORIZED_WEBSITE_ACTIVE"
+        ).length} unauthorized website visit(s) during exam`;
+
+    section.appendChild(summary);
+
+
+    // Create one group of events.
+    function createEventGroup(title, groupEvents, emptyMessage) {
+
+        const group = document.createElement("div");
+        group.className = "proctoring-event-group";
+
+        const groupHeading = document.createElement("h5");
+        groupHeading.textContent =
+            `${title} (${groupEvents.length})`;
+
+        group.appendChild(groupHeading);
+
+        if (groupEvents.length === 0) {
+
+            const empty = document.createElement("p");
+            empty.textContent = emptyMessage;
+
+            group.appendChild(empty);
+
+            section.appendChild(group);
+
+            return;
+        }
+
+        const list = document.createElement("div");
+        list.className = "proctoring-event-list";
+
+        groupEvents.forEach((event) => {
+
+            const item = document.createElement("div");
+
+            item.className =
+                `proctoring-event ${event.severity || "technical"}`;
+
+            // Event title.
+            const titleElement = document.createElement("strong");
+            titleElement.textContent =
+                event.title || event.event_type || "Unknown event";
+
+            item.appendChild(titleElement);
+
+
+            // Event explanation.
+            const description = document.createElement("p");
+
+            description.textContent =
+                event.description ||
+                "No additional explanation is available.";
+
+            item.appendChild(description);
+
+
+            // Website name, when applicable.
+            const websiteUrl = getEventWebsiteUrl(event);
+
+            if (websiteUrl) {
+
+                const website = document.createElement("p");
+
+                website.className = "proctoring-website";
+
+                const websiteName =
+                    getWebsiteDisplayName(websiteUrl);
+
+                const websiteLink = document.createElement("a");
+
+                websiteLink.textContent = websiteName;
+                websiteLink.href = websiteUrl;
+                websiteLink.target = "_blank";
+                websiteLink.rel = "noopener noreferrer";
+
+                website.append("Website: ", websiteLink);
+
+                item.appendChild(website);
+            }
+
+
+            // Timestamp.
+            const time = document.createElement("small");
+
+            time.className = "proctoring-time";
+
+            time.textContent =
+                formatProctoringTimestamp(event.event_timestamp);
+
+            item.appendChild(time);
+
+
+            // Additional event details, if available.
+            if (event.details) {
+
+                const details = document.createElement("p");
+
+                details.className = "proctoring-details";
+
+                // Avoid repeating an entire URL in the details.
+                details.textContent = websiteUrl
+                    ? "Additional details: Unauthorized website activity recorded."
+                    : `Recorded details: ${event.details}`;
+
+                item.appendChild(details);
+            }
+
+            list.appendChild(item);
+        });
+
+        group.appendChild(list);
+        section.appendChild(group);
+    }
+
+
+    // Group 1: Websites already open before the exam.
+    createEventGroup(
+        "Websites Already Open When Exam Started",
+        alreadyOpen,
+        "No unauthorized websites were open when the exam began."
+    );
+
+
+    // Group 2: Activity during the exam.
+    createEventGroup(
+        "Activity During Exam",
+        duringExam,
+        "No additional activity was recorded."
+    );
+
+
+    // Instructor reminder.
+    const disclaimer = document.createElement("p");
+
+    disclaimer.className = "proctoring-disclaimer";
+
+    disclaimer.textContent =
+        "Proctoring events are indicators for instructor review. " +
+        "They do not independently prove academic dishonesty.";
+
+    section.appendChild(disclaimer);
+
+    container.appendChild(section);
+}
 
         async function loadResults(code) {
             const container = $("resultsList");

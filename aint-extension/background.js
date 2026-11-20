@@ -49,7 +49,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
             payload.attemptId
         );
 
-        checkAllTabs();
+        checkAllTabs(true);
     }
 
     if (message?.type === "AINT_PROCTORING_STOP") {
@@ -133,7 +133,7 @@ function isApprovedUrl(url, allowedTabs) {
    RECORD AN UNAUTHORIZED WEBSITE
 ========================================== */
 
-async function recordUnauthorized(exam, url, tabId) {
+async function recordUnauthorized(exam, url, tabId, eventType) {
 
     const key = `${tabId}:${url}`;
 
@@ -152,8 +152,8 @@ async function recordUnauthorized(exam, url, tabId) {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    type: "UNAUTHORIZED_WEBSITE_ACTIVE",
-                    details: "Student visited an unauthorized website.",
+                    type: eventType,
+                    details: `Unauthorized website visited: ${url}`,
                     url: url,
                     timestamp: new Date().toISOString(),
                     attemptId: exam.attemptId
@@ -162,7 +162,6 @@ async function recordUnauthorized(exam, url, tabId) {
         );
 
         if (!response.ok) {
-            // Allow a future retry if the server did not save it.
             exam.reportedUrls.delete(key);
 
             console.error(
@@ -186,12 +185,11 @@ async function recordUnauthorized(exam, url, tabId) {
     }
 }
 
-
 /* ==========================================
    CHECK ONE BROWSER TAB
 ========================================== */
 
-function checkTab(tab) {
+function checkTab(tab, initialScan = false) {
 
     if (!tab || !tab.url || tab.id === undefined) return;
 
@@ -208,13 +206,17 @@ function checkTab(tab) {
         // Never flag the student's own AINT exam tab.
         if (tab.id === examTabId) continue;
 
-        if (
-            !isApprovedUrl(tab.url, exam.allowedTabs)
-        ) {
+        if (!isApprovedUrl(tab.url, exam.allowedTabs)) {
+
+            const eventType = initialScan
+                ? "UNAUTHORIZED_TAB_ALREADY_OPEN"
+                : "UNAUTHORIZED_WEBSITE_ACTIVE";
+
             recordUnauthorized(
                 exam,
                 tab.url,
-                tab.id
+                tab.id,
+                eventType
             );
         }
     }
@@ -225,12 +227,12 @@ function checkTab(tab) {
    CHECK ALL OPEN TABS
 ========================================== */
 
-function checkAllTabs() {
+function checkAllTabs(initialScan = false) {
 
     chrome.tabs.query({}, (tabs) => {
 
         for (const tab of tabs) {
-            checkTab(tab);
+            checkTab(tab, initialScan);
         }
 
     });

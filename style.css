@@ -446,6 +446,69 @@ p2{
 #ai-avatar {
     transition: opacity 0.05s ease-in-out;
 }
+.proctoring-summary {
+    padding: 12px;
+    margin: 12px 0;
+    background: #f1f3f5;
+    border-radius: 8px;
+    font-weight: bold;
+}
+
+.proctoring-event-group {
+    margin-top: 20px;
+}
+
+.proctoring-event-group h5 {
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.proctoring-event {
+    padding: 12px;
+    margin: 8px 0;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.proctoring-event.review {
+    border-left: 5px solid #d69e36;
+}
+
+.proctoring-event.technical {
+    border-left: 5px solid #777;
+}
+
+.proctoring-event.context {
+    border-left: 5px solid #4b8f70;
+}
+
+.proctoring-website {
+    font-weight: bold;
+    overflow-wrap: anywhere;
+}
+
+.proctoring-website a {
+    color: #2457a7;
+    text-decoration: underline;
+}
+
+.proctoring-time {
+    display: block;
+    margin-top: 8px;
+    color: #666;
+}
+
+.proctoring-details {
+    color: #555;
+    font-size: 13px;
+}
+
+.proctoring-disclaimer {
+    margin-top: 20px;
+    color: #666;
+    font-style: italic;
+}
 
 /* Overall results container */
 #resultsList {

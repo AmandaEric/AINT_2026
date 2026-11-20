@@ -2129,7 +2129,8 @@ app.post(
                 "FULLSCREEN_EXIT",
                 "UNAUTHORIZED_TAB_OPENED",
                 "UNAUTHORIZED_TAB_SWITCHED",
-                "UNAUTHORIZED_WEBSITE_ACTIVE",
+                "UNAUTHORIZED_WEBSITE_ACTIVE", 
+                "UNAUTHORIZED_TAB_ALREADY_OPEN",
                 "WINDOW_NOT_MAXIMIZED",
                 "WINDOW_MAXIMIZED",
                 "PAGE_RELOAD",
@@ -2149,10 +2150,12 @@ app.post(
                 return badRequest(res, "A valid event timestamp is required.");
             }
 
+
             const isWebsiteViolation = [
                 "UNAUTHORIZED_TAB_OPENED",
                 "UNAUTHORIZED_TAB_SWITCHED",
-                "UNAUTHORIZED_WEBSITE_ACTIVE"
+                "UNAUTHORIZED_WEBSITE_ACTIVE",
+                "UNAUTHORIZED_TAB_ALREADY_OPEN"
             ].includes(eventType);
 
             if (isWebsiteViolation && !visitedUrl) {
