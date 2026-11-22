@@ -7,7 +7,6 @@ import { generateWithFailover } from "./aiProviders.js";
 import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
-import { Resend } from "resend";
 import multer from "multer";
 
 // ES modules don't have __dirname, so build it
@@ -64,15 +63,29 @@ const pdfUpload = multer({
         callback(null, true);
     }
 });
-const EMAIL_FROM_USER = process.env.EMAIL_USER || process.env.SMTP_USER;
-const EMAIL_PASSWORD = process.env.EMAIL_APP_PASSWORD || process.env.SMTP_PASS;
+const GMAIL_USER = process.env.GMAIL_USER;
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const EMAIL_FROM = process.env.EMAIL_FROM || "AINT System <onboarding@resend.dev>";
+const gmailTransporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+        user: GMAIL_USER,
+        pass: GMAIL_APP_PASSWORD
+    }
+});
 
 async function sendEmail({ to, subject, text, html }) {
-    const { error } = await resend.emails.send({ from: EMAIL_FROM, to, subject, text, html });
-    if (error) throw new Error(`Email failed: ${error.message}`);
+    try {
+        await gmailTransporter.sendMail({
+            from: `AINT System <${GMAIL_USER}>`,
+            to,
+            subject,
+            text,
+            html
+        });
+    } catch (error) {
+        throw new Error(`Email failed: ${error.message}`);
+    }
 }
 
 const CODE_LENGTH = 8;
