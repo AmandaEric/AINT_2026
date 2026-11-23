@@ -490,6 +490,12 @@ bindEvent(el.startButton, "click", async () => {
 
             if (el.studentName) el.studentName.style.display = "none";
             if (el.testCodeInput) el.testCodeInput.style.display = "none";
+            // Hide exam setup instructions after the exam starts
+            const examSetupInstructions = document.getElementById("examSetupInstructions");
+
+            if (examSetupInstructions) {
+                examSetupInstructions.style.display = "none";
+            }
             if (el.avatarContainer) el.avatarContainer.classList.add("avatar-container-large");
 
         } catch (error) {
