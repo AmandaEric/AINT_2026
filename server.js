@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import mysql from "mysql2/promise";
 import dotenv from "dotenv";
-import nodemailer from "nodemailer";
 import { generateWithFailover } from "./aiProviders.js";
 import crypto from "crypto";
 import path from "path";
@@ -63,26 +62,47 @@ const pdfUpload = multer({
         callback(null, true);
     }
 });
-const GMAIL_USER = process.env.GMAIL_USER;
-const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
-
-const gmailTransporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user: GMAIL_USER,
-        pass: GMAIL_APP_PASSWORD
-    }
-});
+const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL;
+const AINT_SECRET = process.env.AINT_SECRET;
 
 async function sendEmail({ to, subject, text, html }) {
     try {
-        await gmailTransporter.sendMail({
-            from: `AINT System <${GMAIL_USER}>`,
-            to,
-            subject,
-            text,
-            html
+        if (!APPS_SCRIPT_URL || !AINT_SECRET) {
+            throw new Error("Missing Google Apps Script configuration.");
+        }
+
+        const response = await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                secret: AINT_SECRET,
+                to,
+                subject,
+                text,
+                html
+            })
         });
+
+        const responseText = await response.text();
+
+        let result;
+
+        try {
+            result = JSON.parse(responseText);
+        } catch {
+            throw new Error(
+                `Invalid response from Google Apps Script: ${responseText.slice(0, 300)}`
+            );
+        }
+
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || `Email request failed: ${response.status}`);
+        }
+
+        console.log("Email sent successfully to:", to);
+
     } catch (error) {
         throw new Error(`Email failed: ${error.message}`);
     }
