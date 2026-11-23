@@ -16,8 +16,7 @@
         "multer": "^2.5.0",
         "mysql2": "^3.24.5",
         "nodemailer": "^10.6.1",
-        "openai": "^7.27.0",
-        "resend": "^6.34.1"
+        "openai": "^7.27.0"
     },
     "description": "AI testing students. Ask questions, Records answers, evaluates response, and follows up.  # AINT — setup",
     "main": "server.js",
