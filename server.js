@@ -14,6 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config(); // don't override variables already set by the host
 console.log("DB CONFIG:", { host: process.env.DB_HOST, port: process.env.DB_PORT, user: process.env.DB_USER, name: process.env.DB_NAME });
 const app = express();
+app.use("/downloads", express.static(path.join(__dirname, "public/downloads")));
 
 // Behind a host's proxy (Railway, Render, ...) req.ip would otherwise be the
 // proxy's address, and every user would share one rate-limit bucket.
