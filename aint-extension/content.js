@@ -34,9 +34,9 @@ window.addEventListener("message", (event) => {
         chrome.runtime.sendMessage({
             type: message.type,
             payload: {
-                ...message.payload,
+                ...(message.payload || {}),
                 backendUrl:
-                    message.payload.backendUrl || window.location.origin
+                    message.payload?.backendUrl || window.location.origin
             }
         });
     }
