@@ -380,7 +380,7 @@ button:active {
 
 .avatar-container {
     position: relative;
-    overflow: hidden;
+    overflow: visible;
 }
 
 /* Hide the avatar when a question has an image */
@@ -399,7 +399,7 @@ button:active {
     z-index: 10;
     background-color: #000;
 } */
-.question-image-container {
+/* .question-image-container {
     position: relative;
     resize: both;
     overflow: auto;
@@ -420,9 +420,9 @@ button:active {
 
     background-color: #000;
     z-index: 20;
-}
+} */
 
-.question-image-container img {
+/* .question-image-container img {
     position: static;
     display: block;
 
@@ -433,7 +433,7 @@ button:active {
     max-height: none;
 
     object-fit: contain;
-}
+} */
 
 /* ADMIN SPECIFIC */
 #adminLogin {
@@ -908,13 +908,13 @@ body.exam-active .avatar-container.has-question-image {
     display: flex;
 }
 /* Question image container */
-.question-image-container {
+ /* {
     position: relative;
     display: none;
     width: 100%;
     max-width: 650px;
     height: 400px;
-    margin: 20px auto;
+    margin: .question-image-container20px auto;
     background-color: #111;
     border: 2px solid #4db6ac;
     border-radius: 16px;
@@ -922,15 +922,15 @@ body.exam-active .avatar-container.has-question-image {
     justify-content: center;
     align-items: center;
     box-sizing: border-box;
-}
+} */
 
 /* Display container only when an image exists */
-.question-image-container.show-image {
+/* .question-image-container.show-image {
     display: flex;
-}
+} */
 
 /* Keep image inside the container */
-.question-image-container #question-image {
+/* .question-image-container #question-image {
     position: static;
     display: block;
     width: 100%;
@@ -939,4 +939,68 @@ body.exam-active .avatar-container.has-question-image {
     max-height: 100%;
     object-fit: contain;
     background: transparent;
+} */
+
+/* ==========================================
+   RESIZABLE QUESTION IMAGE
+========================================== */
+
+.question-image-container {
+    position: relative;
+    display: none;
+
+    /* Starting size */
+    width: 350px;
+    height: 250px;
+
+    /* Allow the student to resize */
+    resize: both;
+    overflow: auto;
+
+    /* Do not restrict it to the main container */
+    max-width: none;
+    max-height: 85vh;
+
+    min-width: 150px;
+    min-height: 100px;
+
+    /* Prevent flexbox from shrinking the image */
+    flex: 0 0 auto;
+
+    margin: 20px auto;
+    padding: 5px;
+
+    background-color: #111;
+    border: 2px solid #4db6ac;
+    border-radius: 10px;
+    box-sizing: border-box;
+
+    justify-content: center;
+    align-items: center;
+    z-index: 20;
+}
+
+/* Show the image container when an image exists */
+.question-image-container.show-image {
+    display: flex;
+}
+
+/* Keep the image inside its resizable box */
+.question-image-container #question-image {
+    position: static;
+    display: block;
+
+    width: 100%;
+    height: 100%;
+
+    max-width: none;
+    max-height: none;
+
+    object-fit: contain;
+    background: transparent;
+}
+
+/* Allow the image to extend beyond the avatar container */
+.avatar-container {
+    overflow: visible;
 }
