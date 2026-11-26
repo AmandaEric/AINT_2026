@@ -2020,32 +2020,39 @@ function renderProctoringReport(events, container) {
 
                             questionSection.appendChild(question);
 
+
                             // ==========================================
                             // DISPLAY STUDENT'S WRITTEN RESPONSES
                             // ==========================================
                             const exchanges = Array.isArray(q.exchanges)
                                 ? q.exchanges
                                 : [];
-                            
+
                             if (exchanges.length > 0) {
                                 const answersHeading = document.createElement("strong");
                                 answersHeading.textContent = "Student Responses:";
-                            
+
                                 questionSection.appendChild(answersHeading);
-                            
+
                                 exchanges.forEach((exchange) => {
                                     const responseBlock = document.createElement("div");
                                     responseBlock.className = "student-response";
-                            
-                                    const prompt = document.createElement("p");
-                                    prompt.textContent =
-                                        `Prompt: ${exchange.question || q.question}`;
-                            
+
+                                    // Only display a prompt if it is a follow-up question.
+                                    if (
+                                        exchange.question &&
+                                        exchange.question.trim() !== q.question.trim()
+                                    ) {
+                                        const prompt = document.createElement("p");
+                                        prompt.textContent = `Follow-up: ${exchange.question}`;
+                                        responseBlock.appendChild(prompt);
+                                    }
+
                                     const answer = document.createElement("p");
                                     answer.textContent =
                                         `Student answer: ${exchange.answer || "No answer recorded."}`;
-                            
-                                    responseBlock.append(prompt, answer);
+
+                                    responseBlock.appendChild(answer);
                                     questionSection.appendChild(responseBlock);
                                 });
                             } else {
@@ -2053,6 +2060,7 @@ function renderProctoringReport(events, container) {
                                 noAnswer.textContent = "No written response recorded.";
                                 questionSection.appendChild(noAnswer);
                             }
+
                             
                             // Match the recording to the question text.
                             const normalize = (value) =>
