@@ -10,14 +10,22 @@ function httpError(status, body) {
     return err;
 }
 
-// Retry temporary failures (overload, rate limit, timeout) with a short backoff
+function isRetryable(err) {
+    return (
+        RETRYABLE_STATUS.has(err.status) ||
+        err.name === "TimeoutError" ||
+        // fetch() network failures (DNS, connection reset) surface as TypeError
+        (err instanceof TypeError && err.message === "fetch failed")
+    );
+}
+
+// Retry temporary failures (overload, rate limit, timeout, network) with backoff + jitter
 async function withRetry(fn, tries = 3) {
     for (let i = 0; i < tries; i++) {
         try {
             return await fn();
         } catch (err) {
-            const retryable = RETRYABLE_STATUS.has(err.status) || err.name === "TimeoutError";
-            if (!retryable || i === tries - 1) throw err;
+            if (!isRetryable(err) || i === tries - 1) throw err;
             await new Promise((r) => setTimeout(r, 1000 * 2 ** i + Math.random() * 300));
         }
     }
@@ -34,7 +42,7 @@ async function callGeminiModel(model, prompt) {
             },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" },
+                generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
             }),
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         }
@@ -51,6 +59,7 @@ async function callGeminiModel(model, prompt) {
 }
 
 function callGemini(prompt) {
+    // Verify this model name against Google's current model list
     const model = env("GEMINI_MODEL") || "gemini-3.8-flash";
     return withRetry(() => callGeminiModel(model, prompt));
 }
@@ -60,11 +69,16 @@ function callGeminiFallback(prompt) {
     return withRetry(() => callGeminiModel(env("GEMINI_FALLBACK_MODEL"), prompt));
 }
 
-async function callOpenAICompatible({ url, apiKey, model, prompt }) {
+async function callOpenAICompatible({ url, apiKey, model, prompt, jsonMode = false }) {
     const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }] }),
+        body: JSON.stringify({
+            model,
+            temperature: 0.2,
+            messages: [{ role: "user", content: prompt }],
+            ...(jsonMode && { response_format: { type: "json_object" } }),
+        }),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
@@ -81,8 +95,11 @@ function callGroq(prompt) {
         callOpenAICompatible({
             url: "https://api.groq.com/openai/v1/chat/completions",
             apiKey: env("GROQ_API_KEY"),
-            model: env("GROQ_MODEL") || (GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b"),
+            // FIX: the old line assigned to an undeclared variable (GROQ_MODEL = ...),
+            // which throws a ReferenceError in ES modules.
+            model: env("GROQ_MODEL") || "openai/gpt-oss-120b",
             prompt,
+            jsonMode: true,
         })
     );
 }
@@ -94,6 +111,8 @@ function callOpenRouter(prompt) {
             apiKey: env("OPENROUTER_API_KEY"),
             model: env("OPENROUTER_MODEL") || "openrouter/free",
             prompt,
+            // No jsonMode: free routed models don't all support response_format.
+            // The caller parses JSON defensively instead.
         })
     );
 }

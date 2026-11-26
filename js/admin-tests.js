@@ -2017,12 +2017,47 @@ function renderProctoringReport(events, container) {
                                 : "") +
                             (q.feedback ? ` | ${q.feedback}` : "");
         
-                        questionSection.appendChild(question);
-        
-                        // Match the recording to the question text.
-                        const normalize = (value) =>
-                            String(value || "").trim().toLowerCase();
-        
+
+                            questionSection.appendChild(question);
+
+                            // ==========================================
+                            // DISPLAY STUDENT'S WRITTEN RESPONSES
+                            // ==========================================
+                            const exchanges = Array.isArray(q.exchanges)
+                                ? q.exchanges
+                                : [];
+                            
+                            if (exchanges.length > 0) {
+                                const answersHeading = document.createElement("strong");
+                                answersHeading.textContent = "Student Responses:";
+                            
+                                questionSection.appendChild(answersHeading);
+                            
+                                exchanges.forEach((exchange) => {
+                                    const responseBlock = document.createElement("div");
+                                    responseBlock.className = "student-response";
+                            
+                                    const prompt = document.createElement("p");
+                                    prompt.textContent =
+                                        `Prompt: ${exchange.question || q.question}`;
+                            
+                                    const answer = document.createElement("p");
+                                    answer.textContent =
+                                        `Student answer: ${exchange.answer || "No answer recorded."}`;
+                            
+                                    responseBlock.append(prompt, answer);
+                                    questionSection.appendChild(responseBlock);
+                                });
+                            } else {
+                                const noAnswer = document.createElement("p");
+                                noAnswer.textContent = "No written response recorded.";
+                                questionSection.appendChild(noAnswer);
+                            }
+                            
+                            // Match the recording to the question text.
+                            const normalize = (value) =>
+                                String(value || "").trim().toLowerCase();
+                            
                         const questionRecordings = studentRecordings.filter(
                             (recording) =>
                                 normalize(recording.question_text) ===
