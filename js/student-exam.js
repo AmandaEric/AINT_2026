@@ -744,7 +744,8 @@ function askNextQuestion() {
     if (el.evaluationBox) el.evaluationBox.innerHTML = "<p>Waiting for student response...</p>";
 
     // Speak the question last, so a speech problem can't block the controls
-    safeSpeak(picked.text);
+    // TEMPORARILY DISABLED: AI avatar speech
+    // safeSpeak(picked.text);
 }
 
 
