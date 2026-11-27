@@ -53,6 +53,7 @@ function checkAintExtension() {
     });
 }
 
+
 // ==========================================
 // CHECK AINT EXTENSION WHEN PAGE LOADS
 // ==========================================
@@ -62,25 +63,40 @@ async function updateExtensionStatus() {
     if (!extensionStatus) return;
 
     extensionStatus.textContent = "Checking for AINT Exam Monitor...";
+    extensionStatus.style.color = "black";
 
-    const extensionInstalled = await checkAintExtension();
+    // Try detecting the extension up to 4 times.
+    for (let attempt = 1; attempt <= 4; attempt++) {
 
-    if (extensionInstalled) {
-        extensionStatus.textContent = "AINT Exam Monitor detected.";
-        extensionStatus.style.color = "green";
-    } else {
-        extensionStatus.textContent =
-            "AINT Exam Monitor not detected. Please install it before starting.";
-        extensionStatus.style.color = "red";
+        const extensionInstalled = await checkAintExtension();
+
+        if (extensionInstalled) {
+            extensionStatus.textContent = "AINT Exam Monitor detected.";
+            extensionStatus.style.color = "green";
+            return;
+        }
+
+        // Wait before trying again.
+        if (attempt < 4) {
+            await new Promise(resolve => setTimeout(resolve, 700));
+        }
     }
+
+    extensionStatus.textContent =
+        "AINT Exam Monitor not detected. Please install it before starting.";
+
+    extensionStatus.style.color = "red";
 }
 
-// Run the check as soon as the page is ready.
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", updateExtensionStatus);
+// Wait until the page has completely loaded.
+if (document.readyState === "complete") {
+    setTimeout(updateExtensionStatus, 1000);
 } else {
-    updateExtensionStatus();
+    window.addEventListener("load", () => {
+        setTimeout(updateExtensionStatus, 1000);
+    }, { once: true });
 }
+
 
 // ==========================================
 // STUDENT: REPLAY QUESTION AUDIO
