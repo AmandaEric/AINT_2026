@@ -52,37 +52,36 @@ function checkAintExtension() {
         );
     });
 }
-// Check for the AINT extension when the page loads.
-async function updateAintExtensionStatus() {
 
+// ==========================================
+// CHECK AINT EXTENSION WHEN PAGE LOADS
+// ==========================================
+async function updateExtensionStatus() {
     const extensionStatus = document.getElementById("extensionStatus");
 
     if (!extensionStatus) return;
 
-    extensionStatus.textContent = "Checking for the AINT extension...";
+    extensionStatus.textContent = "Checking for AINT Exam Monitor...";
 
-    const installed = await checkAintExtension();
+    const extensionInstalled = await checkAintExtension();
 
-    if (installed) {
-        extensionStatus.textContent = "AINT extension detected.";
-        extensionStatus.style.color = "#3f9a90";
+    if (extensionInstalled) {
+        extensionStatus.textContent = "AINT Exam Monitor detected.";
+        extensionStatus.style.color = "green";
     } else {
         extensionStatus.textContent =
-            "AINT Exam Monitor not detected. Please install the extension.";
-
-        extensionStatus.style.color = "#c0392b";
+            "AINT Exam Monitor not detected. Please install it before starting.";
+        extensionStatus.style.color = "red";
     }
 }
 
-// Run immediately if the page has already loaded.
+// Run the check as soon as the page is ready.
 if (document.readyState === "loading") {
-    document.addEventListener(
-        "DOMContentLoaded",
-        updateAintExtensionStatus
-    );
+    document.addEventListener("DOMContentLoaded", updateExtensionStatus);
 } else {
-    updateAintExtensionStatus();
+    updateExtensionStatus();
 }
+
 // ==========================================
 // STUDENT: REPLAY QUESTION AUDIO
 // ==========================================
