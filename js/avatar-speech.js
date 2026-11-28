@@ -408,8 +408,8 @@ function stopAvatarSpeech() {
 
 
 
+// TEMPORARILY DISABLED: Avatar frame loading
 document.addEventListener("DOMContentLoaded", () => {
-    avatarImage = document.querySelector("#ai-avatar");
-    preloadAvatarFrames();
+    avatarImage = null;
     pickVoice();
 });

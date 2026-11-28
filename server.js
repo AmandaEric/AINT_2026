@@ -209,7 +209,8 @@ app.get("/admin-tests.html", (_, res) => res.sendFile(path.join(__dirname, "admi
 app.get("/style.css", (_, res) => res.sendFile(path.join(__dirname, "style.css")));
 app.get("/aintIcon.png", (_, res) => res.sendFile(path.join(__dirname, "aintIcon.png")));
 app.use("/js", express.static(path.join(__dirname, "js")));
-app.use("/aint_avatar_frames", express.static(path.join(__dirname, "aint_avatar_frames")));
+// TEMPORARILY DISABLED: AINT avatar frame images
+// app.use("/aint_avatar_frames", express.static(path.join(__dirname, "aint_avatar_frames")));
 
 // 5 code emails per minute per IP, so the server can't be used to spam addresses
 app.post("/api/admin/request-code", rateLimit(5, 60 * 1000), async (req, res, next) => {
